@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Nova;
+
+use Marshmallow\Priceable\Nova\{{ resource_name }} as Nova{{ resource_name }}Module;
+
+class {{ resource_name }} extends Nova{{ resource_name }}Module
+{
+    // public static $model = 'Marshmallow\Priceable\Models\{{ resource_name }}';
+    // public static $title = 'name';
+    // public static $search = ['name'];
+
+    public function fields(Request $request)
+    {
+        return array_merge(parent::fields($request), [
+    		//
+    	]);
+    }
+
+    public function cards(Request $request)
+    {
+        return array_merge(parent::cards($request), [
+    		//
+    	]);
+    }
+
+    public function filters(Request $request)
+    {
+        return array_merge(parent::filters($request), [
+    		//
+    	]);
+    }
+
+    public function lenses(Request $request)
+    {
+        return array_merge(parent::lenses($request), [
+    		//
+    	]);
+    }
+
+    public function actions(Request $request)
+    {
+        return array_merge(parent::actions($request), [
+    		//
+    	]);
+    }
+}
