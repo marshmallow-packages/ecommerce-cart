@@ -19,8 +19,8 @@
     "minimum-stability": "dev",
     "require": {
         "php": "^7.4",
-        "marshmallow/priceable": "^1.0",
-        "marshmallow/products": "^1.0",
+        "marshmallow/priceable": "^1.1",
+        "marshmallow/products": "^1.2",
         "marshmallow/dataset-country": "^1.2"
     },
     "autoload": {
