@@ -21,7 +21,7 @@
         "php": "^7.4",
         "marshmallow/priceable": "^1.0",
         "marshmallow/products": "^1.0",
-        "marshmallow/country": "^1.0"
+        "marshmallow/dataset-country": "^1.0"
     },
     "autoload": {
         "psr-4": {"Marshmallow\\Ecommerce\\Cart\\": "src"}
