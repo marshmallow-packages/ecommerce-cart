@@ -18,7 +18,7 @@ class CartController extends Controller
 	public function __construct ()
 	{
 		$this->middleware([
-            config('cart.middleware.cart'),
+            config('cart.http.middleware.cart'),
 		]);
 	}
 

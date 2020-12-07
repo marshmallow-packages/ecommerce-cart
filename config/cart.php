@@ -22,9 +22,20 @@ return [
 	],
 
     /**
+     * Nova resources
+     */
+    'nova' => [
+        'resources' => [
+            'prospect' => \Marshmallow\Ecommerce\Cart\Nova\Prospect::class,
+            'customer' => \Marshmallow\Ecommerce\Cart\Nova\Customer::class,
+            'country' => \Marshmallow\Datasets\Country\Nova\Country::class,
+            'shopping_cart' => \Marshmallow\Ecommerce\Cart\Nova\ShoppingCart::class,
+        ],
+    ],
+
+    /**
      * Jobs
      */
-
     'jobs' => [
         'process_inquiry_request' => \Marshmallow\Ecommerce\Cart\Jobs\ProcessInquiryRequest::class,
     ],

@@ -29,7 +29,7 @@ class ServiceProvider extends BaseServiceProvider
      */
     public function boot()
     {
-        app('router')->aliasMiddleware('cart', config('cart.middleware.cart'));
+        app('router')->aliasMiddleware('cart', config('cart.http.middleware.cart'));
 
         $this->loadResources();
         $this->registerEcommerceBladeComponents();

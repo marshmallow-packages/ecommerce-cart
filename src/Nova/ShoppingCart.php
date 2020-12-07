@@ -49,10 +49,10 @@ class ShoppingCart extends Resource
     {
         return [
             ID::make(),
-            BelongsTo::make('Customer')->searchable()->nullable(),
-            BelongsTo::make('Prospect')->searchable()->nullable(),
-            DateTime::make('Created At')->onlyOnIndex(),
-            Textarea::make('Note'),
+            BelongsTo::make(__('Customer'), 'customer', config('cart.nova.resources.customer'))->searchable()->nullable(),
+            BelongsTo::make(__('Prospect'), 'prospect', config('cart.nova.resources.prospect'))->searchable()->nullable(),
+            DateTime::make(__('Created At'), 'created_at')->onlyOnIndex(),
+            Textarea::make(__('Note'), 'note'),
         ];
     }
 

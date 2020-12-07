@@ -10,7 +10,6 @@ use Laravel\Nova\Fields\HasMany;
 use Laravel\Nova\Fields\BelongsTo;
 use Laravel\Nova\Fields\BelongsToMany;
 use Marshmallow\Datasets\Country\Nova\Country;
-use Marshmallow\Datasets\GoogleProductCategories\Nova\GoogleProductCategory;
 
 class Prospect extends Resource
 {
@@ -51,15 +50,15 @@ class Prospect extends Resource
     public function fields(Request $request)
     {
         return [
-            Text::make('First name')->sortable(),
-            Text::make('Last name')->sortable(),
-            Text::make('Company name')->sortable(),
-            Text::make('Address')->sortable(),
-            BelongsTo::make('Country', 'country', Country::class)->sortable()->nullable(),
-            Text::make('Email')->sortable(),
-            Text::make('Phone number')->sortable(),
+            Text::make(__('First name'), 'first_name')->sortable(),
+            Text::make(__('Last name'), 'last_name')->sortable(),
+            Text::make(__('Company name'), 'company_name')->sortable(),
+            Text::make(__('Address'), 'address')->sortable(),
+            BelongsTo::make(__('Country'), 'country', config('cart.nova.resources.country'))->sortable()->nullable(),
+            Text::make(__('Email'), 'email')->sortable(),
+            Text::make(__('Phone number'), 'phone_number')->sortable(),
 
-            HasMany::make('ShoppingCart', 'cart'),
+            HasMany::make(__('Shopping cart'), 'cart', config('cart.nova.resources.shopping_cart')),
         ];
     }
 
