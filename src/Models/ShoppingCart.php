@@ -31,10 +31,13 @@ class ShoppingCart extends Model
 
             $cart->hashed_ip_address = Hash::make(request()->ip());
 
-            // Maak ook gelijk een prospect aan zodat we hier altijd
-            // een koppeling voor hebben.
-            $prospect = Prospect::create([]);
-            $cart->prospect_id = $prospect->id;
+            /**
+             * Only create a prospect if its not provided.
+             */
+            if (!$cart->prospect_id) {
+                $prospect = Prospect::create([]);
+                $cart->prospect_id = $prospect->id;
+            }
         });
     }
 
@@ -70,10 +73,17 @@ class ShoppingCart extends Model
         return $this->id;
     }
 
+    public static function getBySession(): ?ShoppingCart
+    {
+        return self::find(
+            session()->get(self::SESSION_KEY)
+        );
+    }
+
     public static function completelyNew () : ShoppingCart
     {
         $cart = self::create();
-        Session::put(self::SESSION_KEY, $cart->id);
+        session()->put(self::SESSION_KEY, $cart->id);
         return $cart;
     }
 
@@ -83,7 +93,7 @@ class ShoppingCart extends Model
         $new_cart->prospect_id = $cart->prospect_id;
         $new_cart->update();
 
-        Session::put(self::SESSION_KEY, $new_cart->id);
+        session()->put(self::SESSION_KEY, $new_cart->id);
 
         return $new_cart;
     }

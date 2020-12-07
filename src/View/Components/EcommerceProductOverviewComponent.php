@@ -3,17 +3,19 @@
 namespace Marshmallow\Ecommerce\Cart\View\Components;
 
 use Illuminate\View\Component;
+use Marshmallow\Nova\Flexible\Layouts\MarshmallowLayout;
 
-class Cart extends Component
+class EcommerceProductOverviewComponent extends Component
 {
+    protected $layout;
     /**
      * Create a new component instance.
      *
      * @return void
      */
-    public function __construct()
+    public function __construct(MarshmallowLayout $layout)
     {
-        //
+        $this->layout = $layout;
     }
 
     /**
@@ -23,6 +25,8 @@ class Cart extends Component
      */
     public function render()
     {
-        return view('ecommerce::components.cart');
+        return view('ecommerce::components.ecommerce-product-overview')->with([
+            'layout' => $this->layout,
+        ]);;
     }
 }

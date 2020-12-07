@@ -21,10 +21,10 @@ class ShoppingCartResource extends JsonResource
                 'product_count' => $this->items->count(),
             ],
             'prospect' => new ProspectResource($this),
-            'view' => (string) view('layouts.partials.cart')->with([
-                'cart' => $this,
-                'countries' => Country::ordered()->get()
-            ])
+            // 'view' => (string) view('layouts.partials.cart')->with([
+                // 'cart' => $this,
+                // 'countries' => Country::ordered()->get()
+            // ])
         ];
     }
 }

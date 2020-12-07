@@ -7,6 +7,7 @@ use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem;
 use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
 use Marshmallow\Ecommerce\Cart\Http\Requests\ShoppingCartRequest;
+use Marshmallow\Ecommerce\Cart\Http\Resources\ShoppingCartResource;
 use Marshmallow\Ecommerce\Cart\Http\Requests\UpdateCustomerDataRequest;
 use Marshmallow\Ecommerce\Cart\Http\Requests\AddProductsToShoppingCartRequest;
 use Marshmallow\Ecommerce\Cart\Http\Requests\UpdateProductsInShoppingCartRequest;
@@ -17,10 +18,10 @@ class CartController extends Controller
 	public function __construct ()
 	{
 		$this->middleware([
-			CartMiddleware::class
+			CartMiddleware::class,
 		]);
 	}
-	
+
     public function index(ShoppingCart $cart, ShoppingCartRequest $request)
     {
         return new ShoppingCartResource($cart);

@@ -27,19 +27,22 @@ class Inquiry extends Model
     {
         return $this->belongsTo(config('cart.models.customer'));
     }
-    
+
     public function prospect ()
     {
         return $this->belongsTo(config('cart.models.prospect'));
     }
 
-    public function getAmountInDefaultCurrency () {
+    public function getAmountInDefaultCurrency ()
+    {
     	return 0;
     }
-    public function getAmountInCustomerCurrency () {
+    public function getAmountInCustomerCurrency ()
+    {
     	return 0;
     }
-    public function getVatAmountInCustomerCurrency () {
+    public function getVatAmountInCustomerCurrency ()
+    {
     	return 0;
     }
     public function syncToAccounting ()

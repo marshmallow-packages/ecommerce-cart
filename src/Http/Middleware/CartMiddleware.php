@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Http\Middleware;
 use Closure;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Ecommerce\Cart\Http\Resources\ShoppingCartResource;
 
 class CartMiddleware
 {
@@ -15,8 +16,7 @@ class CartMiddleware
      */
     public function handle($request, Closure $next)
     {
-        $cart = ShoppingCart::find($request->session()->get(ShoppingCart::SESSION_KEY));
-
+        $cart = ShoppingCart::getBySession();
         if (!$cart) {
             $cart = ShoppingCart::completelyNew();
         }
@@ -24,7 +24,7 @@ class CartMiddleware
         if ($cart->confirmed_at) {
             $cart = ShoppingCart::newWithSameProspect($cart);
         }
-        
+
         $request->merge([
             'cart' => $cart,
         ]);

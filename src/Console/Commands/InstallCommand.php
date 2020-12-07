@@ -4,14 +4,14 @@ namespace Marshmallow\Ecommerce\Cart\Console\Commands;
 
 use Illuminate\Console\Command;
 
-class CleanCartsCommand extends Command
+class InstallCommand extends Command
 {
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'ecommerce:clear-shoppingcarts';
+    protected $signature = 'ecommerce:install';
 
     /**
      * The console command description.
@@ -37,6 +37,10 @@ class CleanCartsCommand extends Command
      */
     public function handle()
     {
-        $this->info('Clear all expired carts');
+        $this->call('vendor:publish', [
+            '--tag' => 'nova-menu-builder-config',
+        ]);
+
+        $this->info('Marshmallow ecommerce assets have been published');
     }
 }

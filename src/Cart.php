@@ -8,4 +8,11 @@ class Cart
 	{
 		return 'pong';
 	}
+
+    public function layouts ()
+    {
+        return [
+            'ecommerce-product-overview' => \Marshmallow\Ecommerce\Cart\Flexible\Layouts\EcommerceProductOverviewLayout::class,
+        ];
+    }
 }
