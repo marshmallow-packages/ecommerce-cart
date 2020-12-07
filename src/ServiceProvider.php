@@ -4,12 +4,8 @@ namespace Marshmallow\Ecommerce\Cart;
 
 use Livewire\Livewire;
 use Illuminate\Support\Facades\Blade;
-use Marshmallow\Ecommerce\Cart\Http\Livewire\ShoppingCart;
-use Marshmallow\Ecommerce\Cart\Http\Livewire\ProductToCart;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
-use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
 use Marshmallow\Ecommerce\Cart\Console\Commands\DemoShopCommand;
-use Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand;
 use Marshmallow\Ecommerce\Cart\Console\Commands\EcommercePublishCommand;
 
 class ServiceProvider extends BaseServiceProvider
@@ -33,7 +29,7 @@ class ServiceProvider extends BaseServiceProvider
      */
     public function boot()
     {
-        app('router')->aliasMiddleware('cart', CartMiddleware::class);
+        app('router')->aliasMiddleware('cart', config('cart.middleware.cart'));
 
         $this->loadResources();
         $this->registerEcommerceBladeComponents();
@@ -44,21 +40,21 @@ class ServiceProvider extends BaseServiceProvider
 
     protected function registerEcommerceBladeComponents()
     {
-        Blade::component('ecommerce-cart', \Marshmallow\Ecommerce\Cart\View\Components\Cart::class);
-        Blade::component('ecommerce-main-menu', \Marshmallow\Ecommerce\Cart\View\Components\EcommerceMainMenuComponent::class);
+        Blade::component('ecommerce-cart', config('cart.view.components.cart'));
+        Blade::component('ecommerce-main-menu', config('cart.view.components.ecommerce_main_menu_component'));
     }
 
     protected function registerEcommerceLivewireComponents()
     {
-        Livewire::component('shopping-cart', ShoppingCart::class);
-        Livewire::component('product-to-cart', ProductToCart::class);
+        Livewire::component('shopping-cart', config('cart.http.livewire.shopping_cart'));
+        Livewire::component('product-to-cart', config('cart.http.livewire.product_to_cart'));
     }
 
     protected function loadCommands()
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
-                CleanCartsCommand::class,
+                config('cart.commands.clean_carts_command'),
                 EcommercePublishCommand::class,
                 DemoShopCommand::class,
             ]);

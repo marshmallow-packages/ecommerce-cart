@@ -18,7 +18,7 @@ class CartController extends Controller
 	public function __construct ()
 	{
 		$this->middleware([
-			CartMiddleware::class,
+            config('cart.middleware.cart'),
 		]);
 	}
 
@@ -31,9 +31,9 @@ class CartController extends Controller
     {
         foreach ($request->all()['data'] as $item) {
 
-            ShoppingCartItem::add(
+            config('cart.models.shopping_cart_item')::add(
                 $cart,
-                Product::find($item['product_id']),
+                config('cart.models.product')::find($item['product_id']),
                 $item['quantity']
             );
 
@@ -79,7 +79,7 @@ class CartController extends Controller
         $cart->confirmed_at = now();
         $cart->update();
 
-        ProcessInquiryRequest::dispatch($cart);
+        config('cart.jobs.process_inquiry_request')::dispatch($cart);
 
         return new ShoppingCartToInquiryResource($cart);
     }

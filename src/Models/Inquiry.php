@@ -11,7 +11,9 @@ class Inquiry extends Model
 
     public function items ()
     {
-        return $this->hasMany(InquiryItem::class);
+        return $this->hasMany(
+            config('cart.models.inquiry_item')
+        );
     }
 
     public function getCustomerOrProspect ()

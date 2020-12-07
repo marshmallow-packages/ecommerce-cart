@@ -16,13 +16,13 @@ class CartMiddleware
      */
     public function handle($request, Closure $next)
     {
-        $cart = ShoppingCart::getBySession();
+        $cart = config('cart.models.shopping_cart')::getBySession();
         if (!$cart) {
-            $cart = ShoppingCart::completelyNew();
+            $cart = config('cart.models.shopping_cart')::completelyNew();
         }
 
         if ($cart->confirmed_at) {
-            $cart = ShoppingCart::newWithSameProspect($cart);
+            $cart = config('cart.models.shopping_cart')::newWithSameProspect($cart);
         }
 
         $request->merge([

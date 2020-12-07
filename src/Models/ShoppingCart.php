@@ -35,7 +35,7 @@ class ShoppingCart extends Model
              * Only create a prospect if its not provided.
              */
             if (!$cart->prospect_id) {
-                $prospect = Prospect::create([]);
+                $prospect = config('cart.models.prospect')::create([]);
                 $cart->prospect_id = $prospect->id;
             }
         });
@@ -52,7 +52,7 @@ class ShoppingCart extends Model
 
     public function convertToInquiry ()
     {
-        $inquiry = Inquiry::create([
+        $inquiry = config('cart.models.inquiry')::create([
             'prospect_id' => $this->prospect_id,
             'note' => $this->note,
             'shopping_cart_id' => $this->id,
@@ -110,22 +110,22 @@ class ShoppingCart extends Model
 
     public function prospect ()
     {
-        return $this->belongsTo(Prospect::class);
+        return $this->belongsTo(config('cart.models.prospect'));
     }
 
     public function customer ()
     {
-        return $this->belongsTo(Customer::class);
+        return $this->belongsTo(config('cart.models.customer'));
     }
 
     public function items ()
     {
-        return $this->hasMany(ShoppingCartItem::class);
+        return $this->hasMany(config('cart.models.shopping_cart_item'));
     }
 
     public function countries ()
     {
-        return Country::ordered()->get();
+        return config('cart.models.country')::ordered()->get();
     }
 
     public function getIncrementing()

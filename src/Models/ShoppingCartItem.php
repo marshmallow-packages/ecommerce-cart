@@ -23,11 +23,15 @@ class ShoppingCartItem extends Model
 
     public function cart ()
     {
-        return $this->belongsTo(ShoppingCart::class);
+        return $this->belongsTo(
+            config('cart.models.shopping_cart')
+        );
     }
 
     public function product ()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(
+            config('cart.models.product')
+        );
     }
 }

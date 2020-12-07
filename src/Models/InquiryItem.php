@@ -8,10 +8,10 @@ use Marshmallow\Ecommerce\Cart\Models\Inquiry;
 class InquiryItem extends Model
 {
 	protected $guarded = [];
-	
+
     public function inquiry ()
     {
-        return $this->belongsTo(Inquiry::class);
+        return $this->belongsTo(config('cart.models.inquiry'));
     }
 
     public function product ()
