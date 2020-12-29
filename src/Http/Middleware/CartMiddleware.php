@@ -1,6 +1,7 @@
 <?php
 
 namespace Marshmallow\Ecommerce\Cart\Http\Middleware;
+
 use Closure;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Marshmallow\Ecommerce\Cart\Http\Resources\ShoppingCartResource;
