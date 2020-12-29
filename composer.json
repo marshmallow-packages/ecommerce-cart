@@ -23,7 +23,6 @@
         "marshmallow/products": "dev-master",
         "marshmallow/pages": "^2.0",
         "marshmallow/dataset-country": "^1.2",
-        "optimistdigital/nova-menu-builder": "3.0",
         "livewire/livewire": "^2.0"
     },
     "autoload": {
