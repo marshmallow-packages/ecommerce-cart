@@ -27,6 +27,8 @@ php artisan marshmallow:resource Currency Priceable
 php artisan marshmallow:resource Prospect Ecommerce\\Cart
 php artisan marshmallow:resource ShoppingCart Ecommerce\\Cart
 php artisan marshmallow:resource Customer Ecommerce\\Cart
+php artisan marshmallow:resource ShippingMethod Ecommerce\\Cart
+php artisan marshmallow:resource ShippingMethodCondition Ecommerce\\Cart
 php artisan marshmallow:resource Page Pages
 php artisan marshmallow:resource Route Seoable
 ```
@@ -81,6 +83,21 @@ Add the following linkables to your `config/nova-menu.php` file.
 ],
 ```
 
+# Cart methods
+```php
+$cart->productCount();
+$cart->getTotalAmountWithoutShipping();
+$cart->getTotalAmountWithoutShippingAndWithoutVat();
+$cart->getShippingAmount();
+$cart->getShippingAmountWithoutVat();
+$cart->getTotalAmount();
+$cart->getTotalAmountWithoutVat();
+$cart->getTotalVatAmount();
+```
+
+```php
+$cart->getFormatted('getTotalAmount');
+```
 
 - - -
 
