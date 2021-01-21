@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Support\Str;
+use Marshmallow\Priceable\Price;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Session;
@@ -10,9 +11,13 @@ use Marshmallow\Product\Models\Product;
 use Marshmallow\Ecommerce\Cart\Models\Inquiry;
 use Marshmallow\Ecommerce\Cart\Models\Prospect;
 use Marshmallow\Datasets\Country\Models\Country;
+use Marshmallow\Ecommerce\Cart\Traits\CartTotals;
+use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
 
 class ShoppingCart extends Model
 {
+    use CartTotals;
+
     const SESSION_KEY = 'cart';
 
     protected $fillable = [
@@ -43,11 +48,48 @@ class ShoppingCart extends Model
 
     public function add (Product $product, float $quantity = 1)
     {
-        $this->items()->create([
-            'product_id' => $product->id,
-            'quantity' => $quantity,
+        return $this->addCustom(
+            $product->fullname(),
+            $product->getPriceHelper(),
+            ShoppingCartItem::TYPE_PRODUCT,
+            true,
+            $quantity,
+            $product
+        );
+    }
+
+    public function addCustom (string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null)
+    {
+        $cart_item = ShoppingCartItem::firstOrNew([
+            'shopping_cart_id' => $this->id,
+            'product_id' => ($product) ? $product->id : null,
+            'vatrate_id' => $price->vatrate->id,
+            'currency_id' => $price->currency->id,
+            'description' => $description,
+            'type' => $type,
+            'display_price' => $price->display_amount,
+            'price_excluding_vat' => $price->price_excluding_vat,
+            'price_including_vat' => $price->price_including_vat,
+            'vat_amount' => $price->vat_amount,
+            'visible_in_cart' => $visible_in_cart,
         ]);
-        return $this;
+
+        $cart_item->quantity = ($cart_item->quantity + $quantity);
+        $cart_item->save();
+
+        return $this->fresh();
+    }
+
+    public function getShippingItem()
+    {
+        return $this->items()->where('type', ShoppingCartItem::TYPE_SHIPPING)->first();
+    }
+
+    public function shoppingCartContentChanged(ShoppingCartItem $item)
+    {
+        if (! $item->isShippingCost()) {
+            $this->calculateShippingCost();
+        }
     }
 
     public function convertToInquiry ()
@@ -73,6 +115,27 @@ class ShoppingCart extends Model
         return $this->id;
     }
 
+    /**
+     * Protected
+     */
+    protected function calculateShippingCost()
+    {
+        $shipping_item = $this->items->where('type', ShoppingCartItem::TYPE_SHIPPING)->first();
+        if ($shipping_item) {
+            $shipping_item->delete();
+        }
+
+        $shipping_method = ShippingMethod::calculateFromCart($this);
+
+        if ($shipping_method) {
+            $price = $shipping_method->getPriceHelper();
+            $this->addCustom($shipping_method->name, $price, ShoppingCartItem::TYPE_SHIPPING, false);
+        }
+    }
+
+    /**
+     * Statics
+     */
     public static function getBySession(): ?ShoppingCart
     {
         return self::find(
