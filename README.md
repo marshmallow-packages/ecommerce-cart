@@ -115,7 +115,7 @@ $item->getTotalAmountWithoutVat();
 $item->getTotalVatAmount();
 
 // Formatted
-$cart->getFormatted('getTotalAmount');
+$item->getFormatted('getTotalAmount');
 ```
 
 
