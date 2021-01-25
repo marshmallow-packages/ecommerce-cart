@@ -69,4 +69,10 @@ return [
     'commands' => [
         'clean_carts_command' => \Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand::class,
     ],
+
+    /**
+     * Override the guard to use to connect
+     * a loggedin user to the shopping carts
+     */
+    'customer_guard' => 'web',
 ];

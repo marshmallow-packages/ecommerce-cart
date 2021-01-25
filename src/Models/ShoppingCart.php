@@ -4,11 +4,15 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Support\Str;
 use Marshmallow\Priceable\Price;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Session;
 use Marshmallow\Product\Models\Product;
+use Marshmallow\Addressable\Models\Address;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Models\Inquiry;
+use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Ecommerce\Cart\Models\Prospect;
 use Marshmallow\Datasets\Country\Models\Country;
 use Marshmallow\Ecommerce\Cart\Traits\CartTotals;
@@ -22,16 +26,19 @@ class ShoppingCart extends Model
 
     const SESSION_KEY = 'cart';
 
-    protected $fillable = [
-        'hashed_ip_address',
-        'note',
-    ];
+    protected $guarded = [];
 
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($cart) {
+
+            $guard = Cart::getUserGuard();
+            if (Auth::guard($guard)->check()) {
+                $cart->connectUser(Auth::guard($guard)->user());
+            }
+
             if (! $cart->getKey()) {
                 $cart->{$cart->getKeyName()} = (string) Str::uuid();
             }
@@ -150,6 +157,64 @@ class ShoppingCart extends Model
         $cart = self::create();
         session()->put(self::SESSION_KEY, $cart->id);
         return $cart;
+    }
+
+    public function connectUser($user)
+    {
+        $this->user_id = $user->id;
+        $this->update();
+
+        if (method_exists($user, 'addresses')) {
+
+            $default_shipping = $user->getDefaultAddress(AddressType::SHIPPING);
+            if ($default_shipping && $this->doesNotHaveShippingAddress()) {
+                $this->connectShippingAddress($default_shipping);
+            }
+
+            $default_invoice = $user->getDefaultAddress(AddressType::INVOICE);
+            if ($default_invoice && $this->doesNotHaveInvoiceAddress()) {
+                $this->connectInvoiceAddress($default_invoice);
+            }
+        }
+    }
+
+    public function disconnectUser()
+    {
+        $this->update([
+            'user_id' => null,
+        ]);
+    }
+
+    public function doesNotHaveShippingAddress(): bool
+    {
+        return ! $this->hasShippingAddress();
+    }
+
+    public function hasShippingAddress(): bool
+    {
+        return ($this->shipping_address_id !== null);
+    }
+
+    public function connectShippingAddress(Address $address)
+    {
+        $this->shipping_address_id = $address->id;
+        $this->update();
+    }
+
+    public function doesNotHaveInvoiceAddress(): bool
+    {
+        return ! $this->hasInvoiceAddress();
+    }
+
+    public function hasInvoiceAddress(): bool
+    {
+        return ($this->invoice_address_id !== null);
+    }
+
+    public function connectInvoiceAddress(Address $address)
+    {
+        $this->invoice_address_id = $address->id;
+        $this->update();
     }
 
     public static function newWithSameProspect (ShoppingCart $cart) : ShoppingCart
