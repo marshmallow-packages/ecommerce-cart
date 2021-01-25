@@ -6,9 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Product\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Ecommerce\Cart\Traits\CartItemTotals;
+use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCartItem extends Model
 {
+    use PriceFormatter;
+    use CartItemTotals;
+
     protected $guarded = [];
 
     public const TYPE_PRODUCT = 'PRODUCT';
