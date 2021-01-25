@@ -46,7 +46,7 @@ class ShoppingCart extends Model
         });
     }
 
-    public function add (Product $product, float $quantity = 1)
+    public function add (Product $product, float $quantity = 1): ShoppingCartItem
     {
         return $this->addCustom(
             $product->fullname(),
@@ -58,7 +58,7 @@ class ShoppingCart extends Model
         );
     }
 
-    public function addCustom (string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null)
+    public function addCustom (string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
     {
         $cart_item = ShoppingCartItem::firstOrNew([
             'shopping_cart_id' => $this->id,
@@ -77,7 +77,7 @@ class ShoppingCart extends Model
         $cart_item->quantity = ($cart_item->quantity + $quantity);
         $cart_item->save();
 
-        return $this->fresh();
+        return $cart_item;
     }
 
     public function getShippingItem()

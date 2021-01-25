@@ -40,6 +40,42 @@ class ShoppingCartItem extends Model
         return ($this->type === self::TYPE_SHIPPING);
     }
 
+    public function setQuantity(int $quantity): self
+    {
+        $this->update([
+            'quantity' => $quantity,
+        ]);
+
+        return $this;
+    }
+
+    public function increaseQuantity(int $increase_with = 1): self
+    {
+        $this->update([
+            'quantity' => $this->quantity + $increase_with,
+        ]);
+
+        return $this;
+    }
+
+    public function decreaseQuantity(int $decrease_with = 1): self
+    {
+        /**
+         * Calculate the new quantity
+         */
+        $quantity = $this->quantity - $decrease_with;
+
+        /**
+         * Make sure we never get a value below zero.
+         */
+        $quantity = ($quantity <= 0) ? 1 : $quantity;
+        $this->update([
+            'quantity' => $quantity,
+        ]);
+
+        return $this;
+    }
+
     /**
      * Statics
      */

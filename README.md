@@ -95,6 +95,11 @@ $cart->getTotalAmountWithoutVat();
 $cart->getTotalVatAmount();
 ```
 
+# Item methods
+$item->setQuantity(4);
+$item->increaseQuantity();
+$item->decreaseQuantity();
+
 ```php
 $cart->getFormatted('getTotalAmount');
 ```
