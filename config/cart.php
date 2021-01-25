@@ -11,6 +11,7 @@ return [
      * Models
      */
 	'models' => [
+        'user' => \App\Models\User::class,
 		'product' => \Marshmallow\Product\Models\Product::class,
         'country' => \Marshmallow\Datasets\Country\Models\Country::class,
 		'prospect' => \Marshmallow\Ecommerce\Cart\Models\Prospect::class,
@@ -19,6 +20,7 @@ return [
         'shopping_cart_item' => \Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem::class,
         'inquiry' => \Marshmallow\Ecommerce\Cart\Models\Inquiry::class,
         'inquiry_item' => \Marshmallow\Ecommerce\Cart\Models\InquiryItem::class,
+        'address' => \Marshmallow\Addressable\Models\Address::class,
 	],
 
     /**

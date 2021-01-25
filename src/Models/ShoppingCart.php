@@ -238,6 +238,9 @@ class ShoppingCart extends Model
         return (Hash::check(request()->ip(), $this->hashed_ip_address));
     }
 
+    /**
+     * Relationships
+     */
     public function prospect ()
     {
         return $this->belongsTo(config('cart.models.prospect'));
@@ -258,6 +261,24 @@ class ShoppingCart extends Model
         return config('cart.models.country')::ordered()->get();
     }
 
+    public function user ()
+    {
+        return $this->belongsTo(config('cart.models.user'));
+    }
+
+    public function shippingAddress ()
+    {
+        return $this->belongsTo(config('cart.models.address'), 'shipping_address_id');
+    }
+
+    public function invoiceAddress ()
+    {
+        return $this->belongsTo(config('cart.models.address'), 'invoice_address_id');
+    }
+
+    /**
+     * Model setup
+     */
     public function getIncrementing()
     {
         return false;
