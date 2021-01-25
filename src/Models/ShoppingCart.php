@@ -13,10 +13,12 @@ use Marshmallow\Ecommerce\Cart\Models\Prospect;
 use Marshmallow\Datasets\Country\Models\Country;
 use Marshmallow\Ecommerce\Cart\Traits\CartTotals;
 use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
+use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCart extends Model
 {
     use CartTotals;
+    use PriceFormatter;
 
     const SESSION_KEY = 'cart';
 
