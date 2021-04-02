@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Session;
+use Marshmallow\Payable\Traits\Payable;
 use Marshmallow\Product\Models\Product;
 use Marshmallow\Addressable\Models\Address;
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
@@ -22,6 +23,7 @@ use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 class ShoppingCart extends Model
 {
     use CartTotals;
+    use Payable;
     use PriceFormatter;
 
     const SESSION_KEY = 'cart';
@@ -34,12 +36,14 @@ class ShoppingCart extends Model
 
         static::creating(function ($cart) {
 
+            $cart->display_id = $cart->max('display_id') + 1;
+
             $guard = Cart::getUserGuard();
             if (Auth::guard($guard)->check()) {
                 $cart->connectUser(Auth::guard($guard)->user());
             }
 
-            if (! $cart->getKey()) {
+            if (!$cart->getKey()) {
                 $cart->{$cart->getKeyName()} = (string) Str::uuid();
             }
 
@@ -55,7 +59,7 @@ class ShoppingCart extends Model
         });
     }
 
-    public function add (Product $product, float $quantity = 1): ShoppingCartItem
+    public function add(Product $product, float $quantity = 1): ShoppingCartItem
     {
         return $this->addCustom(
             $product->fullname(),
@@ -67,7 +71,7 @@ class ShoppingCart extends Model
         );
     }
 
-    public function addCustom (string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
+    public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
     {
         $cart_item = ShoppingCartItem::firstOrNew([
             'shopping_cart_id' => $this->id,
@@ -96,12 +100,12 @@ class ShoppingCart extends Model
 
     public function shoppingCartContentChanged(ShoppingCartItem $item)
     {
-        if (! $item->isShippingCost()) {
+        if (!$item->isShippingCost()) {
             $this->calculateShippingCost();
         }
     }
 
-    public function convertToInquiry ()
+    public function convertToInquiry()
     {
         $inquiry = config('cart.models.inquiry')::create([
             'prospect_id' => $this->prospect_id,
@@ -119,9 +123,14 @@ class ShoppingCart extends Model
         return $inquiry;
     }
 
-    public function getTrackAndTraceId ()
+    public function getTrackAndTraceId()
     {
         return $this->id;
+    }
+
+    public function getPayableDescription(): string
+    {
+        return __('Order') . " #{$this->display_id}";
     }
 
     /**
@@ -152,7 +161,7 @@ class ShoppingCart extends Model
         );
     }
 
-    public static function completelyNew () : ShoppingCart
+    public static function completelyNew(): ShoppingCart
     {
         $cart = self::create();
         session()->put(self::SESSION_KEY, $cart->id);
@@ -187,7 +196,7 @@ class ShoppingCart extends Model
 
     public function doesNotHaveShippingAddress(): bool
     {
-        return ! $this->hasShippingAddress();
+        return !$this->hasShippingAddress();
     }
 
     public function hasShippingAddress(): bool
@@ -203,7 +212,7 @@ class ShoppingCart extends Model
 
     public function doesNotHaveInvoiceAddress(): bool
     {
-        return ! $this->hasInvoiceAddress();
+        return !$this->hasInvoiceAddress();
     }
 
     public function hasInvoiceAddress(): bool
@@ -217,7 +226,7 @@ class ShoppingCart extends Model
         $this->update();
     }
 
-    public static function newWithSameProspect (ShoppingCart $cart) : ShoppingCart
+    public static function newWithSameProspect(ShoppingCart $cart): ShoppingCart
     {
         $new_cart = self::completelyNew();
         $new_cart->prospect_id = $cart->prospect_id;
@@ -233,7 +242,7 @@ class ShoppingCart extends Model
      * Voor nu checken we alleen op gehashte ip addressen, in de
      * toekomst kan hier misschien een user check bij komen.
      */
-    public function authorized ()
+    public function authorized()
     {
         return (Hash::check(request()->ip(), $this->hashed_ip_address));
     }
@@ -241,37 +250,37 @@ class ShoppingCart extends Model
     /**
      * Relationships
      */
-    public function prospect ()
+    public function prospect()
     {
         return $this->belongsTo(config('cart.models.prospect'));
     }
 
-    public function customer ()
+    public function customer()
     {
         return $this->belongsTo(config('cart.models.customer'));
     }
 
-    public function items ()
+    public function items()
     {
         return $this->hasMany(config('cart.models.shopping_cart_item'));
     }
 
-    public function countries ()
+    public function countries()
     {
         return config('cart.models.country')::ordered()->get();
     }
 
-    public function user ()
+    public function user()
     {
         return $this->belongsTo(config('cart.models.user'));
     }
 
-    public function shippingAddress ()
+    public function shippingAddress()
     {
         return $this->belongsTo(config('cart.models.address'), 'shipping_address_id');
     }
 
-    public function invoiceAddress ()
+    public function invoiceAddress()
     {
         return $this->belongsTo(config('cart.models.address'), 'invoice_address_id');
     }
