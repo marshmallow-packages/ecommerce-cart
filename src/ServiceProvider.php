@@ -4,6 +4,7 @@ namespace Marshmallow\Ecommerce\Cart;
 
 use Livewire\Livewire;
 use Illuminate\Support\Facades\Blade;
+use Marshmallow\Ecommerce\Cart\EventServiceProvider;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use Marshmallow\Ecommerce\Cart\Console\Commands\DemoShopCommand;
 use Marshmallow\Ecommerce\Cart\Console\Commands\EcommercePublishCommand;
@@ -20,6 +21,8 @@ class ServiceProvider extends BaseServiceProvider
         $this->mergeConfigFrom(
             __DIR__.'/../config/cart.php', 'cart'
         );
+
+        $this->app->register(EventServiceProvider::class);
     }
 
     /**

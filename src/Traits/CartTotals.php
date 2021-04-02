@@ -59,10 +59,4 @@ trait CartTotals
     {
         return $this->getTotalAmount() - $this->getTotalAmountWithoutVat();
     }
-
-    public function getFormatted(string $method): string
-    {
-        $value = $this->{$method}();
-        return \Marshmallow\Priceable\Facades\Price::formatAmount($value);
-    }
 }

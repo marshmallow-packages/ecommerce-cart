@@ -4,33 +4,46 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Support\Str;
 use Marshmallow\Priceable\Price;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Session;
+use Marshmallow\Payable\Traits\Payable;
 use Marshmallow\Product\Models\Product;
+use Marshmallow\Addressable\Models\Address;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Models\Inquiry;
+use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Ecommerce\Cart\Models\Prospect;
 use Marshmallow\Datasets\Country\Models\Country;
 use Marshmallow\Ecommerce\Cart\Traits\CartTotals;
 use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
+use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCart extends Model
 {
     use CartTotals;
+    use Payable;
+    use PriceFormatter;
 
     const SESSION_KEY = 'cart';
 
-    protected $fillable = [
-        'hashed_ip_address',
-        'note',
-    ];
+    protected $guarded = [];
 
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($cart) {
-            if (! $cart->getKey()) {
+
+            $cart->display_id = $cart->max('display_id') + 1;
+
+            $guard = Cart::getUserGuard();
+            if (Auth::guard($guard)->check()) {
+                $cart->connectUser(Auth::guard($guard)->user());
+            }
+
+            if (!$cart->getKey()) {
                 $cart->{$cart->getKeyName()} = (string) Str::uuid();
             }
 
@@ -46,7 +59,7 @@ class ShoppingCart extends Model
         });
     }
 
-    public function add (Product $product, float $quantity = 1)
+    public function add(Product $product, float $quantity = 1): ShoppingCartItem
     {
         return $this->addCustom(
             $product->fullname(),
@@ -58,7 +71,7 @@ class ShoppingCart extends Model
         );
     }
 
-    public function addCustom (string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null)
+    public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
     {
         $cart_item = ShoppingCartItem::firstOrNew([
             'shopping_cart_id' => $this->id,
@@ -77,7 +90,7 @@ class ShoppingCart extends Model
         $cart_item->quantity = ($cart_item->quantity + $quantity);
         $cart_item->save();
 
-        return $this->fresh();
+        return $cart_item;
     }
 
     public function getShippingItem()
@@ -87,12 +100,12 @@ class ShoppingCart extends Model
 
     public function shoppingCartContentChanged(ShoppingCartItem $item)
     {
-        if (! $item->isShippingCost()) {
+        if (!$item->isShippingCost()) {
             $this->calculateShippingCost();
         }
     }
 
-    public function convertToInquiry ()
+    public function convertToInquiry()
     {
         $inquiry = config('cart.models.inquiry')::create([
             'prospect_id' => $this->prospect_id,
@@ -110,9 +123,14 @@ class ShoppingCart extends Model
         return $inquiry;
     }
 
-    public function getTrackAndTraceId ()
+    public function getTrackAndTraceId()
     {
         return $this->id;
+    }
+
+    public function getPayableDescription(): string
+    {
+        return __('Order') . " #{$this->display_id}";
     }
 
     /**
@@ -143,14 +161,72 @@ class ShoppingCart extends Model
         );
     }
 
-    public static function completelyNew () : ShoppingCart
+    public static function completelyNew(): ShoppingCart
     {
         $cart = self::create();
         session()->put(self::SESSION_KEY, $cart->id);
         return $cart;
     }
 
-    public static function newWithSameProspect (ShoppingCart $cart) : ShoppingCart
+    public function connectUser($user)
+    {
+        $this->user_id = $user->id;
+        $this->update();
+
+        if (method_exists($user, 'addresses')) {
+
+            $default_shipping = $user->getDefaultAddress(AddressType::SHIPPING);
+            if ($default_shipping && $this->doesNotHaveShippingAddress()) {
+                $this->connectShippingAddress($default_shipping);
+            }
+
+            $default_invoice = $user->getDefaultAddress(AddressType::INVOICE);
+            if ($default_invoice && $this->doesNotHaveInvoiceAddress()) {
+                $this->connectInvoiceAddress($default_invoice);
+            }
+        }
+    }
+
+    public function disconnectUser()
+    {
+        $this->update([
+            'user_id' => null,
+        ]);
+    }
+
+    public function doesNotHaveShippingAddress(): bool
+    {
+        return !$this->hasShippingAddress();
+    }
+
+    public function hasShippingAddress(): bool
+    {
+        return ($this->shipping_address_id !== null);
+    }
+
+    public function connectShippingAddress(Address $address)
+    {
+        $this->shipping_address_id = $address->id;
+        $this->update();
+    }
+
+    public function doesNotHaveInvoiceAddress(): bool
+    {
+        return !$this->hasInvoiceAddress();
+    }
+
+    public function hasInvoiceAddress(): bool
+    {
+        return ($this->invoice_address_id !== null);
+    }
+
+    public function connectInvoiceAddress(Address $address)
+    {
+        $this->invoice_address_id = $address->id;
+        $this->update();
+    }
+
+    public static function newWithSameProspect(ShoppingCart $cart): ShoppingCart
     {
         $new_cart = self::completelyNew();
         $new_cart->prospect_id = $cart->prospect_id;
@@ -166,31 +242,52 @@ class ShoppingCart extends Model
      * Voor nu checken we alleen op gehashte ip addressen, in de
      * toekomst kan hier misschien een user check bij komen.
      */
-    public function authorized ()
+    public function authorized()
     {
         return (Hash::check(request()->ip(), $this->hashed_ip_address));
     }
 
-    public function prospect ()
+    /**
+     * Relationships
+     */
+    public function prospect()
     {
         return $this->belongsTo(config('cart.models.prospect'));
     }
 
-    public function customer ()
+    public function customer()
     {
         return $this->belongsTo(config('cart.models.customer'));
     }
 
-    public function items ()
+    public function items()
     {
         return $this->hasMany(config('cart.models.shopping_cart_item'));
     }
 
-    public function countries ()
+    public function countries()
     {
         return config('cart.models.country')::ordered()->get();
     }
 
+    public function user()
+    {
+        return $this->belongsTo(config('cart.models.user'));
+    }
+
+    public function shippingAddress()
+    {
+        return $this->belongsTo(config('cart.models.address'), 'shipping_address_id');
+    }
+
+    public function invoiceAddress()
+    {
+        return $this->belongsTo(config('cart.models.address'), 'invoice_address_id');
+    }
+
+    /**
+     * Model setup
+     */
     public function getIncrementing()
     {
         return false;

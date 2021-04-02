@@ -93,11 +93,31 @@ $cart->getShippingAmountWithoutVat();
 $cart->getTotalAmount();
 $cart->getTotalAmountWithoutVat();
 $cart->getTotalVatAmount();
-```
 
-```php
+// Formatted
 $cart->getFormatted('getTotalAmount');
 ```
+
+# Item methods
+```php
+$item->setQuantity(4);
+$item->increaseQuantity();
+$item->decreaseQuantity();
+
+// Amount helpers
+$item->getUnitAmount();
+$item->getUnitAmountWithVat();
+$item->getUnitAmountWithoutVat();
+$item->getUnitVatAmount();
+$item->getTotalAmount();
+$item->getTotalAmountWithVat();
+$item->getTotalAmountWithoutVat();
+$item->getTotalVatAmount();
+
+// Formatted
+$item->getFormatted('getTotalAmount');
+```
+
 
 - - -
 

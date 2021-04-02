@@ -6,9 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Product\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Ecommerce\Cart\Traits\CartItemTotals;
+use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCartItem extends Model
 {
+    use PriceFormatter;
+    use CartItemTotals;
+
     protected $guarded = [];
 
     public const TYPE_PRODUCT = 'PRODUCT';
@@ -38,6 +43,42 @@ class ShoppingCartItem extends Model
     public function isShippingCost()
     {
         return ($this->type === self::TYPE_SHIPPING);
+    }
+
+    public function setQuantity(int $quantity): self
+    {
+        $this->update([
+            'quantity' => $quantity,
+        ]);
+
+        return $this;
+    }
+
+    public function increaseQuantity(int $increase_with = 1): self
+    {
+        $this->update([
+            'quantity' => $this->quantity + $increase_with,
+        ]);
+
+        return $this;
+    }
+
+    public function decreaseQuantity(int $decrease_with = 1): self
+    {
+        /**
+         * Calculate the new quantity
+         */
+        $quantity = $this->quantity - $decrease_with;
+
+        /**
+         * Make sure we never get a value below zero.
+         */
+        $quantity = ($quantity <= 0) ? 1 : $quantity;
+        $this->update([
+            'quantity' => $quantity,
+        ]);
+
+        return $this;
     }
 
     /**
