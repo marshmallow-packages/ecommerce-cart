@@ -22,8 +22,8 @@
     "require": {
         "php": "^7.4|^8.0",
         "marshmallow/priceable": "^1.1",
-        "marshmallow/products": "dev-master",
-        "marshmallow/payable": "dev-master",
+        "marshmallow/products": "dev-development",
+        "marshmallow/payable": "dev-development",
         "marshmallow/pages": "^2.0",
         "marshmallow/dataset-country": "^1.2",
         "livewire/livewire": "^2.0"
