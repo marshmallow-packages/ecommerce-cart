@@ -2,9 +2,9 @@
 
 namespace Marshmallow\Ecommerce\Cart\Traits;
 
-trait CartTotals
+trait Totals
 {
-	public function productCount(): int
+    public function productCount(): int
     {
         return intval($this->items()->visable()->sum('quantity'));
     }
@@ -37,6 +37,14 @@ trait CartTotals
         return 0;
     }
 
+    public function getShippingAmountIncludingVat(): int
+    {
+        if ($shipping = $this->getShippingItem()) {
+            return $shipping->price_including_vat;
+        }
+        return 0;
+    }
+
     public function getShippingAmountWithoutVat(): int
     {
         if ($shipping = $this->getShippingItem()) {
@@ -45,9 +53,22 @@ trait CartTotals
         return 0;
     }
 
+    public function getShippingVatAmount(): int
+    {
+        if ($shipping = $this->getShippingItem()) {
+            return $shipping->vat_amount;
+        }
+        return 0;
+    }
+
     public function getTotalAmount(): int
     {
         return $this->getTotalAmountWithoutShipping() + $this->getShippingAmount();
+    }
+
+    public function getTotalAmountIncludingVat(): int
+    {
+        return $this->getTotalAmount();
     }
 
     public function getTotalAmountWithoutVat(): int

@@ -1,18 +1,18 @@
 <?php
 
-namespace Marshmallow\Example\Exceptions;
+namespace Marshmallow\Ecommerce\Cart\Exceptions;
 
 use Exception;
 
 class ExampleException extends Exception
 {
-    public function report ()
+    public function report()
     {
-    	//
+        //
     }
 
-    public function render ()
+    public function render()
     {
-    	//
+        //
     }
 }

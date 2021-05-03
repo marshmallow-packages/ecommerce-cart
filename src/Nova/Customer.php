@@ -55,6 +55,8 @@ class Customer extends Resource
             BelongsTo::make('Country', 'country', config('cart.nova.resources.country'))->sortable()->nullable(),
             Text::make(__('Email'), 'email')->sortable(),
             Text::make(__('Phone number'), 'phone_number')->sortable(),
+
+            HasMany::make(__('Orders'), 'orders', config('cart.nova.resources.order')),
         ];
     }
 

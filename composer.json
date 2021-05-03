@@ -26,6 +26,7 @@
         "marshmallow/payable": "dev-development",
         "marshmallow/pages": "^2.0",
         "marshmallow/dataset-country": "^1.2",
+        "eminiarts/nova-tabs": "^1.4.3",
         "livewire/livewire": "^2.0"
     },
     "autoload": {
