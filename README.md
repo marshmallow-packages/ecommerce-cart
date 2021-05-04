@@ -21,6 +21,11 @@ protected $middlewareGroups = [
 ];
 ```
 
+## Events
+
+CustomerCreated
+OrderCreated
+
 # Install Nova
 
 ```bash

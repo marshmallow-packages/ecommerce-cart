@@ -20,6 +20,14 @@ class Order extends Model
     public static function createUniqueFromShoppingCart(ShoppingCart $shoppingCart)
     {
         /**
+         * Check if its already converted.
+         */
+        $order = self::where('shopping_cart_id', $shoppingCart->id)->first();
+        if ($order) {
+            return $order;
+        }
+
+        /**
          * Convert the prospect to a customer
          */
         $prospect = $shoppingCart->prospect;
