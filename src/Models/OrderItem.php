@@ -3,10 +3,12 @@
 namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Marshmallow\Ecommerce\Cart\Traits\ItemTotals;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class OrderItem extends Model
 {
+    use ItemTotals;
     use PriceFormatter;
 
     protected $guarded = [];

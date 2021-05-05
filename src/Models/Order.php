@@ -5,6 +5,7 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Priceable\Models\Currency;
 use Marshmallow\Addressable\Models\Address;
+use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Traits\Addressable;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
 use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
@@ -12,6 +13,7 @@ use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class Order extends Model
 {
+    use Totals;
     use Addressable;
     use PriceFormatter;
 
