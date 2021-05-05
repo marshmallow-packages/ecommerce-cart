@@ -7,22 +7,19 @@ use Marshmallow\Priceable\Price;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Session;
 use Marshmallow\Payable\Traits\Payable;
 use Marshmallow\Product\Models\Product;
+use Marshmallow\Priceable\Models\Currency;
 use Marshmallow\Addressable\Models\Address;
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
-use Marshmallow\Ecommerce\Cart\Models\Inquiry;
+use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
-use Marshmallow\Ecommerce\Cart\Models\Prospect;
-use Marshmallow\Datasets\Country\Models\Country;
-use Marshmallow\Ecommerce\Cart\Traits\CartTotals;
 use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCart extends Model
 {
-    use CartTotals;
+    use Totals;
     use Payable;
     use PriceFormatter;
 
@@ -123,6 +120,11 @@ class ShoppingCart extends Model
         return $inquiry;
     }
 
+    public function convertToOrder()
+    {
+        return Order::createUniqueFromShoppingCart($this);
+    }
+
     public function getTrackAndTraceId()
     {
         return $this->id;
@@ -149,23 +151,6 @@ class ShoppingCart extends Model
             $price = $shipping_method->getPriceHelper();
             $this->addCustom($shipping_method->name, $price, ShoppingCartItem::TYPE_SHIPPING, false);
         }
-    }
-
-    /**
-     * Statics
-     */
-    public static function getBySession(): ?ShoppingCart
-    {
-        return self::find(
-            session()->get(self::SESSION_KEY)
-        );
-    }
-
-    public static function completelyNew(): ShoppingCart
-    {
-        $cart = self::create();
-        session()->put(self::SESSION_KEY, $cart->id);
-        return $cart;
     }
 
     public function connectUser($user)
@@ -224,6 +209,23 @@ class ShoppingCart extends Model
     {
         $this->invoice_address_id = $address->id;
         $this->update();
+    }
+
+    /**
+     * Statics
+     */
+    public static function getBySession(): ?ShoppingCart
+    {
+        return self::find(
+            session()->get(self::SESSION_KEY)
+        );
+    }
+
+    public static function completelyNew(): ShoppingCart
+    {
+        $cart = self::create();
+        session()->put(self::SESSION_KEY, $cart->id);
+        return $cart;
     }
 
     public static function newWithSameProspect(ShoppingCart $cart): ShoppingCart

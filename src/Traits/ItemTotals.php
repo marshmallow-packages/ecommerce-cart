@@ -2,7 +2,7 @@
 
 namespace Marshmallow\Ecommerce\Cart\Traits;
 
-trait CartItemTotals
+trait ItemTotals
 {
     public function getUnitAmount(): int
     {

@@ -5,14 +5,14 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Product\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
+use Marshmallow\Ecommerce\Cart\Traits\ItemTotals;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
-use Marshmallow\Ecommerce\Cart\Traits\CartItemTotals;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCartItem extends Model
 {
     use PriceFormatter;
-    use CartItemTotals;
+    use ItemTotals;
 
     protected $guarded = [];
 
@@ -84,7 +84,7 @@ class ShoppingCartItem extends Model
     /**
      * Statics
      */
-    public static function add (ShoppingCart $cart, Product $product, int $quantity)
+    public static function add(ShoppingCart $cart, Product $product, int $quantity)
     {
         $cart->add($product, $quantity);
     }
@@ -100,7 +100,7 @@ class ShoppingCartItem extends Model
     /**
      * Relationships
      */
-    public function cart ()
+    public function cart()
     {
         return $this->belongsTo(
             config('cart.models.shopping_cart'),
@@ -108,7 +108,7 @@ class ShoppingCartItem extends Model
         );
     }
 
-    public function product ()
+    public function product()
     {
         return $this->belongsTo(
             config('cart.models.product'),
