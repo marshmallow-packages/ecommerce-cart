@@ -156,6 +156,7 @@ class ShoppingCart extends Model
     public function connectUser($user)
     {
         $this->user_id = $user->id;
+        $this->customer_id = ($user->customer) ? $user->customer->id : null;
         $this->update();
 
         if (method_exists($user, 'addresses')) {
@@ -176,7 +177,13 @@ class ShoppingCart extends Model
     {
         $this->update([
             'user_id' => null,
+            'customer_id' => null,
         ]);
+    }
+
+    public function getCustomerOrProspect()
+    {
+        return ($this->customer) ? $this->customer : $this->prospect;
     }
 
     public function doesNotHaveShippingAddress(): bool
