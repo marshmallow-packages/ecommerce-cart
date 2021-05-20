@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Marshmallow\Priceable\Models\Currency;
 use Marshmallow\Addressable\Models\Address;
 use Marshmallow\Ecommerce\Cart\Traits\Totals;
@@ -16,6 +17,10 @@ class Order extends Model
     use Totals;
     use Addressable;
     use PriceFormatter;
+
+    public const STATUS_PENDING = 'PENDING';
+    public const STATUS_CANCELED = 'CANCELED';
+    public const STATUS_COMPLETED = 'COMPLETED';
 
     protected $guarded = [];
 
@@ -36,19 +41,37 @@ class Order extends Model
         if (!$prospect) {
             $prospect = Prospect::withTrashed()->find($shoppingCart->prospect_id);
         }
-        $customer = $prospect->convertToCustomer();
 
+        $customer = $shoppingCart->customer ?? $prospect->convertToCustomer();
 
         /**
          * Convert the address so the are connected to the customer
          * instead of the prospect.
          */
         $ignore_columns = ['id', 'addressable_type', 'addressable_id', 'created_at', 'updated_at', 'deleted_at'];
-        $prospect_shipping_address = collect($shoppingCart->shippingAddress->toArray())->except($ignore_columns)->toArray();
-        $prospect_invoice_address = collect($shoppingCart->invoiceAddress->toArray())->except($ignore_columns)->toArray();
+
+        $prospect_shipping_address = collect(
+            $shoppingCart->shippingAddress()->withTrashed()->first()->toArray()
+        )
+            ->except($ignore_columns)
+            ->toArray();
 
         $shipping_address = $customer->addresses()->create($prospect_shipping_address);
-        $invoice_address = $customer->addresses()->create($prospect_invoice_address);
+        $invoice_address = $shipping_address;
+
+        /**
+         * If there is another address for invoice, we need to create
+         * another one.
+         */
+        if ($shoppingCart->shipping_address_id != $shoppingCart->invoice_address_id) {
+            $prospect_invoice_address = collect(
+                $shoppingCart->invoiceAddress()->withTrashed()->first()->toArray()
+            )
+                ->except($ignore_columns)
+                ->toArray();
+
+            $invoice_address = $customer->addresses()->create($prospect_invoice_address);
+        }
 
         /**
          * Delete the address of the prospect. We will be deleting
@@ -126,6 +149,42 @@ class Order extends Model
         return $order;
     }
 
+    public function isPending()
+    {
+        return ($this->status == self::STATUS_PENDING);
+    }
+
+    public function isCanceled()
+    {
+        return ($this->status == self::STATUS_CANCELED);
+    }
+
+    public function isCompleted()
+    {
+        return ($this->status == self::STATUS_COMPLETED);
+    }
+
+    public function markAsPending()
+    {
+        $this->setStatus(self::STATUS_PENDING);
+    }
+
+    public function markAsCanceled()
+    {
+        $this->setStatus(self::STATUS_CANCELED);
+    }
+
+    public function markAsCompleted()
+    {
+        $this->setStatus(self::STATUS_COMPLETED);
+    }
+
+    protected function setStatus(string $status)
+    {
+        $this->status = $status;
+        $this->saveQuietly();
+    }
+
     public function shippingAddress()
     {
         return config('cart.models.address')::find($this->shipping_address_id);
@@ -134,6 +193,21 @@ class Order extends Model
     public function invoiceAddress()
     {
         return config('cart.models.address')::find($this->invoice_address_id);
+    }
+
+    public function scopePending(Builder $builder)
+    {
+        $builder->where('status', self::STATUS_PENDING);
+    }
+
+    public function scopeCanceled(Builder $builder)
+    {
+        $builder->where('status', self::STATUS_CANCELED);
+    }
+
+    public function scopeCompleted(Builder $builder)
+    {
+        $builder->where('status', self::STATUS_COMPLETED);
     }
 
     public function items()
