@@ -256,6 +256,11 @@ class ShoppingCart extends Model
         return (Hash::check(request()->ip(), $this->hashed_ip_address));
     }
 
+    public function visibleItems()
+    {
+        return self::items()->visable()->get();
+    }
+
     /**
      * Relationships
      */

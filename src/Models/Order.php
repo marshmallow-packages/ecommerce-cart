@@ -11,6 +11,7 @@ use Marshmallow\Addressable\Traits\Addressable;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
 use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
+use Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem;
 
 class Order extends Model
 {
@@ -23,6 +24,10 @@ class Order extends Model
     public const STATUS_COMPLETED = 'COMPLETED';
 
     protected $guarded = [];
+
+    protected $casts = [
+        'shipped_at' => 'datetime',
+    ];
 
     public static function createUniqueFromShoppingCart(ShoppingCart $shoppingCart)
     {
@@ -50,37 +55,39 @@ class Order extends Model
          */
         $ignore_columns = ['id', 'addressable_type', 'addressable_id', 'created_at', 'updated_at', 'deleted_at'];
 
-        $prospect_shipping_address = collect(
-            $shoppingCart->shippingAddress()->withTrashed()->first()->toArray()
-        )
-            ->except($ignore_columns)
-            ->toArray();
-
-        $shipping_address = $customer->addresses()->create($prospect_shipping_address);
-        $invoice_address = $shipping_address;
-
-        /**
-         * If there is another address for invoice, we need to create
-         * another one.
-         */
-        if ($shoppingCart->shipping_address_id != $shoppingCart->invoice_address_id) {
-            $prospect_invoice_address = collect(
-                $shoppingCart->invoiceAddress()->withTrashed()->first()->toArray()
+        if ($address = $shoppingCart->shippingAddress()->withTrashed()->first()) {
+            $prospect_shipping_address = collect(
+                $address->toArray()
             )
                 ->except($ignore_columns)
                 ->toArray();
 
-            $invoice_address = $customer->addresses()->create($prospect_invoice_address);
-        }
+            $shipping_address = $customer->addresses()->create($prospect_shipping_address);
+            $invoice_address = $shipping_address;
 
-        /**
-         * Delete the address of the prospect. We will be deleting
-         * the prospect as well because it's not a prospect anymore.
-         */
-        $prospect->addresses->each(function ($address) {
-            $address->delete();
-        });
-        $prospect->delete();
+            /**
+             * If there is another address for invoice, we need to create
+             * another one.
+             */
+            if ($shoppingCart->shipping_address_id != $shoppingCart->invoice_address_id) {
+                $prospect_invoice_address = collect(
+                    $shoppingCart->invoiceAddress()->withTrashed()->first()->toArray()
+                )
+                    ->except($ignore_columns)
+                    ->toArray();
+
+                $invoice_address = $customer->addresses()->create($prospect_invoice_address);
+            }
+
+            /**
+             * Delete the address of the prospect. We will be deleting
+             * the prospect as well because it's not a prospect anymore.
+             */
+            $prospect->addresses->each(function ($address) {
+                $address->delete();
+            });
+            $prospect->delete();
+        }
 
 
         /**
@@ -93,8 +100,8 @@ class Order extends Model
             'shopping_cart_display_id' => $shoppingCart->display_id,
             'customer_id' => $customer->id,
             'user_id' => $shoppingCart->user_id,
-            'shipping_address_id' => $shipping_address->id,
-            'invoice_address_id' => $invoice_address->id,
+            'shipping_address_id' => (isset($shipping_address) && $shipping_address) ? $shipping_address->id : null,
+            'invoice_address_id' => (isset($invoice_address) && $invoice_address) ? $invoice_address->id : null,
             'shipping_method_id' => ShippingMethod::first()->id,
             'note' => $shoppingCart->note,
             'currency_id' => Currency::first()->id,
@@ -149,6 +156,14 @@ class Order extends Model
         return $order;
     }
 
+    public function getShippedAtDateAsString(string $format = 'Y-m-d')
+    {
+        if ($this->shipped_at) {
+            return $this->shipped_at->format($format);
+        }
+        return __('Not yet');
+    }
+
     public function isPending()
     {
         return ($this->status == self::STATUS_PENDING);
@@ -187,17 +202,25 @@ class Order extends Model
 
     public function shippingAddress()
     {
-        return config('cart.models.address')::find($this->shipping_address_id);
+        return config('cart.models.address')::where('id', $this->shipping_address_id)->withTrashed()->first();
     }
 
     public function invoiceAddress()
     {
-        return config('cart.models.address')::find($this->invoice_address_id);
+        return config('cart.models.address')::where('id', $this->invoice_address_id)->withTrashed()->first();
+    }
+
+    public function getShippingItem()
+    {
+        return $this->items()->where('type', ShoppingCartItem::TYPE_SHIPPING)->first();
     }
 
     public function scopePending(Builder $builder)
     {
-        $builder->where('status', self::STATUS_PENDING);
+        $builder->where(function (Builder $builder) {
+            $builder->whereNull('status')
+                ->orwhere('status', self::STATUS_PENDING);
+        });
     }
 
     public function scopeCanceled(Builder $builder)
@@ -208,6 +231,11 @@ class Order extends Model
     public function scopeCompleted(Builder $builder)
     {
         $builder->where('status', self::STATUS_COMPLETED);
+    }
+
+    public function visibleItems()
+    {
+        return self::items()->visable()->get();
     }
 
     public function items()

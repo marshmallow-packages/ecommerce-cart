@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Marshmallow\Ecommerce\Cart\Traits\ItemTotals;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
@@ -21,6 +22,11 @@ class OrderItem extends Model
     public function product()
     {
         return $this->belongsTo(config('cart.models.product'));
+    }
+
+    public function scopeVisable(Builder $builder)
+    {
+        $builder->where('visible_in_cart', true);
     }
 
     public function vatrate()
