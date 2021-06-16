@@ -65,7 +65,7 @@ php artisan db:seed --class=Marshmallow\\Priceable\\Seeders\\VatRatesSeeder
 # Envoirment file
 
 ```env
-CASHIER_CURRENCY=eur
+CURRENCY=eur
 ```
 
 # Layouts
