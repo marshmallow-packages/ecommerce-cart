@@ -3,8 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Http\Middleware;
 
 use Closure;
-use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
-use Marshmallow\Ecommerce\Cart\Http\Resources\ShoppingCartResource;
+use Marshmallow\HelperFunctions\Facades\URL;
 
 class CartMiddleware
 {
@@ -17,6 +16,10 @@ class CartMiddleware
      */
     public function handle($request, Closure $next)
     {
+        if (URL::isNova($request)) {
+            return $next($request);
+        }
+
         $cart = config('cart.models.shopping_cart')::getBySession();
         if (!$cart) {
             $cart = config('cart.models.shopping_cart')::completelyNew();
