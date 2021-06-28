@@ -13,7 +13,7 @@ trait Totals
     {
         $total = 0;
         foreach ($this->items()->visable()->get() as $item) {
-            $price_including_vat = $item->product->price()->price_including_vat;
+            $price_including_vat = $item->price_including_vat;
             $total += ($price_including_vat * $item->quantity);
         }
         return $total;
@@ -23,7 +23,7 @@ trait Totals
     {
         $total = 0;
         foreach ($this->items()->visable()->get() as $item) {
-            $price_without_vat = $item->product->price()->price_excluding_vat;
+            $price_without_vat = $item->price_excluding_vat;
             $total += ($price_without_vat * $item->quantity);
         }
         return $total;
