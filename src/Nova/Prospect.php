@@ -13,7 +13,10 @@ use Marshmallow\Datasets\Country\Nova\Country;
 
 class Prospect extends Resource
 {
-    public static $group = 'Customers';
+    public static function group()
+    {
+        return __('Customers');
+    }
 
     /**
      * The model the resource corresponds to.
@@ -38,7 +41,7 @@ class Prospect extends Resource
      */
     public function title()
     {
-        return trim($this->first_name . ' ' . $this->last_name) . ' ('. $this->id .')';
+        return trim($this->first_name . ' ' . $this->last_name) . ' (' . $this->id . ')';
     }
 
     /**
