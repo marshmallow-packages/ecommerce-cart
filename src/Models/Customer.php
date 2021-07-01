@@ -11,6 +11,11 @@ class Customer extends Model
 
     protected $guarded = [];
 
+    public function getFullName()
+    {
+        return trim("{$this->first_name} {$this->last_name}");
+    }
+
     public function cart()
     {
         return $this->hasOne(
