@@ -17,7 +17,10 @@ use Marshmallow\Ecommerce\Cart\Nova\ShippingMethodCondition;
 
 class ShippingMethod extends Resource
 {
-    public static $group = 'Pricing';
+    public static function group()
+    {
+        return __('Pricing');
+    }
 
     public static function label()
     {

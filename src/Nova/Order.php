@@ -20,7 +20,10 @@ class Order extends Resource
 {
     use TabsOnEdit;
 
-    public static $group = 'Orders';
+    public static function group()
+    {
+        return __('Orders');
+    }
 
     /**
      * The model the resource corresponds to.

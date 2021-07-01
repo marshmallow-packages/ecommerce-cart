@@ -12,7 +12,10 @@ use Marshmallow\Priceable\Nova\Helpers\FieldNameHelper;
 
 class ShippingMethodCondition extends Resource
 {
-    public static $group = 'Pricing';
+    public static function group()
+    {
+        return __('Pricing');
+    }
 
     /**
      * Indicates if the resource should be displayed in the sidebar.
@@ -68,12 +71,12 @@ class ShippingMethodCondition extends Resource
                 return Price::formatAmount($value);
             })->resolveUsing(function ($value) {
                 return Price::amount($value);
-            })->rules('numeric', 'min:0','required'),
+            })->rules('numeric', 'min:0', 'required'),
             Currency::make(FieldNameHelper::priceLabel('Maximum amount'), 'maximum_amount')->displayUsing(function ($value) {
                 return Price::formatAmount($value);
             })->resolveUsing(function ($value) {
                 return Price::amount($value);
-            })->rules('numeric', 'min:0','required')->required(),
+            })->rules('numeric', 'min:0', 'required')->required(),
         ];
     }
 

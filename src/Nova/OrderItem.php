@@ -17,6 +17,12 @@ use Laravel\Nova\Fields\BelongsTo;
 class OrderItem extends Resource
 {
     use TabsOnEdit;
+
+    public static function group()
+    {
+        return __('Orders');
+    }
+
     /**
      * Indicates if the resource should be displayed in the sidebar.
      *
