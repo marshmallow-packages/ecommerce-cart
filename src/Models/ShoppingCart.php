@@ -135,6 +135,26 @@ class ShoppingCart extends Model
         return __('Order') . " #{$this->display_id}";
     }
 
+    public function getCustomerName(): ?string
+    {
+        $customer = $this->getCustomerOrProspect();
+        if ($customer && $name = $customer->getFullName()) {
+            return $name;
+        }
+
+        return null;
+    }
+
+    public function getCustomerEmail(): ?string
+    {
+        $customer = $this->getCustomerOrProspect();
+        if ($customer && $email = $customer->email) {
+            return $email;
+        }
+
+        return null;
+    }
+
     /**
      * Protected
      */
