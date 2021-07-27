@@ -104,17 +104,17 @@ class ShippingMethod extends Model
      */
     public function vatrate()
     {
-        return $this->belongsTo(VatRate::class);
+        return $this->belongsTo(config('cart.models.vat_rate'));
     }
 
     public function currency()
     {
-        return $this->belongsTo(Currency::class);
+        return $this->belongsTo(config('cart.models.currency'));
     }
 
     public function conditions()
     {
-        return $this->hasMany(ShippingMethodCondition::class);
+        return $this->hasMany(config('cart.models.shipping_method_condition'));
     }
 
     /**

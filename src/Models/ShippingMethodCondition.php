@@ -16,7 +16,7 @@ class ShippingMethodCondition extends Model
 
     public function method()
     {
-        return $this->belongsTo(ShippingMethod::class, 'shipping_method_id');
+        return $this->belongsTo(config('cart.models.shipping_method'), 'shipping_method_id');
     }
 
     /**

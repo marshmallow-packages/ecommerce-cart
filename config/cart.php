@@ -1,8 +1,8 @@
 <?php
 
 /**
-                             * All classes can be overrules by your own custom classes.
-     * The classes that you overrule should extend the original version
+ * All classes can be overrules by your own custom classes.
+ * The classes that you overrule should extend the original version
  * for the cart system to work properly.
  */
 
@@ -26,6 +26,7 @@ return [
         'address' => \Marshmallow\Addressable\Models\Address::class,
         'currency' => \Marshmallow\Priceable\Models\Currency::class,
         'shipping_method' => \Marshmallow\Ecommerce\Cart\Models\ShippingMethod::class,
+        'shipping_method_condition' => \Marshmallow\Ecommerce\Cart\Models\ShippingMethodCondition::class,
         'vat_rate' => \Marshmallow\Priceable\Models\VatRate::class,
     ],
 
@@ -41,6 +42,7 @@ return [
             'country' => \Marshmallow\Datasets\Country\Nova\Country::class,
             'shopping_cart' => \Marshmallow\Ecommerce\Cart\Nova\ShoppingCart::class,
             'shipping_method' => \Marshmallow\Ecommerce\Cart\Nova\ShippingMethod::class,
+            'shipping_method_condition' => \Marshmallow\Ecommerce\Cart\Nova\ShippingMethodCondition::class,
             'vat_rate' => \Marshmallow\Priceable\Nova\VatRate::class,
         ],
     ],
