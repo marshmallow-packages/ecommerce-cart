@@ -26,7 +26,7 @@ class Prospect extends Model
      */
     public function convertToCustomer()
     {
-        if ($customer = Customer::where('prospect_id', $this->id)->first()) {
+        if ($customer = config('cart.models.customer')::where('prospect_id', $this->id)->first()) {
             return $customer;
         }
         $customer = config('cart.models.customer')::where('email', $this->email)->first();

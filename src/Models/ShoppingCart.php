@@ -70,7 +70,7 @@ class ShoppingCart extends Model
 
     public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
     {
-        $cart_item = ShoppingCartItem::firstOrNew([
+        $cart_item = config('cart.models.shopping_cart_item')::firstOrNew([
             'shopping_cart_id' => $this->id,
             'product_id' => ($product) ? $product->id : null,
             'vatrate_id' => $price->vatrate->id,
@@ -92,7 +92,7 @@ class ShoppingCart extends Model
 
     public function getShippingItem()
     {
-        return $this->items()->where('type', ShoppingCartItem::TYPE_SHIPPING)->first();
+        return $this->items()->where('type', config('cart.models.shopping_cart_item')::TYPE_SHIPPING)->first();
     }
 
     public function shoppingCartContentChanged(ShoppingCartItem $item)
@@ -160,7 +160,7 @@ class ShoppingCart extends Model
      */
     protected function calculateShippingCost()
     {
-        $shipping_item = $this->items->where('type', ShoppingCartItem::TYPE_SHIPPING)->first();
+        $shipping_item = $this->items->where('type', config('cart.models.shopping_cart_item')::TYPE_SHIPPING)->first();
         if ($shipping_item) {
             $shipping_item->delete();
         }
@@ -169,7 +169,7 @@ class ShoppingCart extends Model
 
         if ($shipping_method) {
             $price = $shipping_method->getPriceHelper();
-            $this->addCustom($shipping_method->name, $price, ShoppingCartItem::TYPE_SHIPPING, false);
+            $this->addCustom($shipping_method->name, $price, config('cart.models.shopping_cart_item')::TYPE_SHIPPING, false);
         }
     }
 

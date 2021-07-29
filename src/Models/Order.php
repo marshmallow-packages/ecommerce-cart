@@ -44,7 +44,7 @@ class Order extends Model
          */
         $prospect = $shoppingCart->prospect;
         if (!$prospect) {
-            $prospect = Prospect::withTrashed()->find($shoppingCart->prospect_id);
+            $prospect = config('cart.models.prospect')::withTrashed()->find($shoppingCart->prospect_id);
         }
 
         $customer = $shoppingCart->customer ?? $prospect->convertToCustomer();
@@ -93,7 +93,7 @@ class Order extends Model
         /**
          * Create the order
          */
-        $order = Order::updateOrCreate([
+        $order = config('cart.models.order')::updateOrCreate([
             'shopping_cart_id' => $shoppingCart->id,
         ], [
             'shopping_cart_id' => $shoppingCart->id,
@@ -102,9 +102,9 @@ class Order extends Model
             'user_id' => $shoppingCart->user_id,
             'shipping_address_id' => (isset($shipping_address) && $shipping_address) ? $shipping_address->id : null,
             'invoice_address_id' => (isset($invoice_address) && $invoice_address) ? $invoice_address->id : null,
-            'shipping_method_id' => ShippingMethod::first()->id,
+            'shipping_method_id' => config('cart.models.shipping_method')::first()->id,
             'note' => $shoppingCart->note,
-            'currency_id' => Currency::first()->id,
+            'currency_id' => config('cart.models.currency')::first()->id,
             'display_price' => $shoppingCart->getTotalAmount(),
             'price_excluding_vat' => $shoppingCart->getTotalAmountWithoutVat(),
             'price_including_vat' => $shoppingCart->getTotalAmountIncludingVat(),
@@ -147,7 +147,7 @@ class Order extends Model
                 'visible_in_cart' => $item->visible_in_cart,
             ];
 
-            OrderItem::updateOrCreate([
+            config('cart.models.order_item')::updateOrCreate([
                 'order_id' => $order->id,
                 'shopping_cart_item_id' => $item->id,
             ], $data);

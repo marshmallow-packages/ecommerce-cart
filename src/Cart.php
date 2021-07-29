@@ -18,14 +18,14 @@ class Cart
 
     public function get(): ShoppingCart
     {
-        if ($cart = ShoppingCart::getBySession()) {
+        if ($cart = config('cart.models.shopping_cart')::getBySession()) {
             return $cart;
         }
 
-        return ShoppingCart::completelyNew();
+        return config('cart.models.shopping_cart')::completelyNew();
     }
 
-    public function layouts ()
+    public function layouts()
     {
         return [
             'ecommerce-product-overview' => \Marshmallow\Ecommerce\Cart\Flexible\Layouts\EcommerceProductOverviewLayout::class,
