@@ -2,6 +2,7 @@
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Marshmallow\Ecommerce\Cart\Cart;
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Product\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
@@ -110,9 +111,10 @@ class ShoppingCartItem extends Model
 
     public function product()
     {
-        return $this->belongsTo(
-            config('cart.models.product'),
-            'product_id'
-        );
+        return $this->setConnection(Cart::$productConnection)
+            ->belongsTo(
+                config('cart.models.product'),
+                'product_id'
+            );
     }
 }

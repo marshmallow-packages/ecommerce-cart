@@ -2,6 +2,7 @@
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Marshmallow\Ecommerce\Cart\Cart;
 use Illuminate\Database\Eloquent\Model;
 
 class InquiryItem extends Model
@@ -15,6 +16,7 @@ class InquiryItem extends Model
 
     public function product()
     {
-        return $this->belongsTo(config('cart.models.product'));
+        return $this->setConnection(Cart::$productConnection)
+            ->belongsTo(config('cart.models.product'));
     }
 }
