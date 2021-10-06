@@ -120,7 +120,7 @@ class ShoppingCart extends Model
 
     public function convertToOrder()
     {
-        return Order::createUniqueFromShoppingCart($this);
+        return config('cart.models.order')::createUniqueFromShoppingCart($this);
     }
 
     public function getTrackAndTraceId()

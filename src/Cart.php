@@ -7,6 +7,9 @@ use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 
 class Cart
 {
+    public static $productConnection = null;
+    public static $currencyConnection = null;
+
     public function getUserGuard()
     {
         if ($guard = config('cart.customer_guard')) {
