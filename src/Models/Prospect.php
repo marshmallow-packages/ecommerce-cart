@@ -5,8 +5,6 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Addressable\Traits\Addressable;
-use Marshmallow\Datasets\Country\Models\Country;
-use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Marshmallow\Ecommerce\Cart\Events\CustomerCreated;
 
 class Prospect extends Model
@@ -26,7 +24,7 @@ class Prospect extends Model
      */
     public function convertToCustomer()
     {
-        if ($customer = Customer::where('prospect_id', $this->id)->first()) {
+        if ($customer = config('cart.models.customer')::where('prospect_id', $this->id)->first()) {
             return $customer;
         }
         $customer = config('cart.models.customer')::where('email', $this->email)->first();

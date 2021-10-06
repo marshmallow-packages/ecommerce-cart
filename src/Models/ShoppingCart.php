@@ -9,12 +9,10 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Payable\Traits\Payable;
 use Marshmallow\Product\Models\Product;
-use Marshmallow\Priceable\Models\Currency;
 use Marshmallow\Addressable\Models\Address;
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
-use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 
 class ShoppingCart extends Model
@@ -70,7 +68,7 @@ class ShoppingCart extends Model
 
     public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
     {
-        $cart_item = ShoppingCartItem::firstOrNew([
+        $cart_item = config('cart.models.shopping_cart_item')::firstOrNew([
             'shopping_cart_id' => $this->id,
             'product_id' => ($product) ? $product->id : null,
             'vatrate_id' => $price->vatrate->id,
@@ -135,9 +133,14 @@ class ShoppingCart extends Model
         return __('Order') . " #{$this->display_id}";
     }
 
+    public function getCustomer(): ?Model
+    {
+        return $this->getCustomerOrProspect();
+    }
+
     public function getCustomerName(): ?string
     {
-        $customer = $this->getCustomerOrProspect();
+        $customer = $this->getCustomer();
         if ($customer && $name = $customer->getFullName()) {
             return $name;
         }
@@ -147,7 +150,7 @@ class ShoppingCart extends Model
 
     public function getCustomerEmail(): ?string
     {
-        $customer = $this->getCustomerOrProspect();
+        $customer = $this->getCustomer();
         if ($customer && $email = $customer->email) {
             return $email;
         }
@@ -165,7 +168,7 @@ class ShoppingCart extends Model
             $shipping_item->delete();
         }
 
-        $shipping_method = ShippingMethod::calculateFromCart($this);
+        $shipping_method = config('cart.models.shipping_method')::calculateFromCart($this);
 
         if ($shipping_method) {
             $price = $shipping_method->getPriceHelper();

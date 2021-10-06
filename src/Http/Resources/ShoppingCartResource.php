@@ -3,7 +3,6 @@
 namespace Marshmallow\Ecommerce\Cart\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
-use Marshmallow\Datasets\Country\Models\Country;
 use Marshmallow\Ecommerce\Cart\Http\Resources\ProspectResource;
 
 class ShoppingCartResource extends JsonResource
@@ -22,8 +21,8 @@ class ShoppingCartResource extends JsonResource
             ],
             'prospect' => new ProspectResource($this),
             // 'view' => (string) view('layouts.partials.cart')->with([
-                // 'cart' => $this,
-                // 'countries' => Country::ordered()->get()
+            // 'cart' => $this,
+            // 'countries' => Country::ordered()->get()
             // ])
         ];
     }

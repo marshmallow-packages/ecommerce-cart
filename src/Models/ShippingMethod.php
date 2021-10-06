@@ -5,13 +5,10 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Priceable\Facades\Price;
 use Illuminate\Database\Eloquent\Builder;
-use Marshmallow\Priceable\Models\VatRate;
-use Marshmallow\Priceable\Models\Currency;
 use Marshmallow\HelperFunctions\Traits\Observer;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Marshmallow\HelperFunctions\Traits\ModelHasDefaults;
-use Marshmallow\Ecommerce\Cart\Models\ShippingMethodCondition;
 use Marshmallow\HelperFunctions\Facades\Builder as BuilderHelper;
 
 class ShippingMethod extends Model
@@ -104,17 +101,17 @@ class ShippingMethod extends Model
      */
     public function vatrate()
     {
-        return $this->belongsTo(VatRate::class);
+        return $this->belongsTo(config('cart.models.vat_rate'));
     }
 
     public function currency()
     {
-        return $this->belongsTo(Currency::class);
+        return $this->belongsTo(config('cart.models.currency'));
     }
 
     public function conditions()
     {
-        return $this->hasMany(ShippingMethodCondition::class);
+        return $this->hasMany(config('cart.models.shipping_method_condition'));
     }
 
     /**

@@ -4,7 +4,6 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\HelperFunctions\Traits\Observer;
-use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ShippingMethodCondition extends Model
@@ -16,7 +15,7 @@ class ShippingMethodCondition extends Model
 
     public function method()
     {
-        return $this->belongsTo(ShippingMethod::class, 'shipping_method_id');
+        return $this->belongsTo(config('cart.models.shipping_method'), 'shipping_method_id');
     }
 
     /**
