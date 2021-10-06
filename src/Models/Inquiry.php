@@ -3,20 +3,19 @@
 namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Marshmallow\Ecommerce\Cart\Models\InquiryItem;
 
 class Inquiry extends Model
 {
     protected $guarded = [];
 
-    public function items ()
+    public function items()
     {
         return $this->hasMany(
             config('cart.models.inquiry_item')
         );
     }
 
-    public function getCustomerOrProspect ()
+    public function getCustomerOrProspect()
     {
         if ($this->customer) {
             return $this->customer;
@@ -25,29 +24,29 @@ class Inquiry extends Model
         return $this->prospect;
     }
 
-    public function customer ()
+    public function customer()
     {
         return $this->belongsTo(config('cart.models.customer'));
     }
 
-    public function prospect ()
+    public function prospect()
     {
         return $this->belongsTo(config('cart.models.prospect'));
     }
 
-    public function getAmountInDefaultCurrency ()
+    public function getAmountInDefaultCurrency()
     {
-    	return 0;
+        return 0;
     }
-    public function getAmountInCustomerCurrency ()
+    public function getAmountInCustomerCurrency()
     {
-    	return 0;
+        return 0;
     }
-    public function getVatAmountInCustomerCurrency ()
+    public function getVatAmountInCustomerCurrency()
     {
-    	return 0;
+        return 0;
     }
-    public function syncToAccounting ()
+    public function syncToAccounting()
     {
         if (!$this->accountable) {
             return app('accounting')->service->createInquiry($this);

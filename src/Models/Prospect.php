@@ -5,8 +5,6 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Addressable\Traits\Addressable;
-use Marshmallow\Datasets\Country\Models\Country;
-use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Marshmallow\Ecommerce\Cart\Events\CustomerCreated;
 
 class Prospect extends Model
