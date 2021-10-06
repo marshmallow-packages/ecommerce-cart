@@ -8,6 +8,7 @@
 
 return [
 
+
     /**
      * Models
      */
@@ -42,6 +43,7 @@ return [
             'country' => \Marshmallow\Datasets\Country\Nova\Country::class,
             'shopping_cart' => \Marshmallow\Ecommerce\Cart\Nova\ShoppingCart::class,
             'shipping_method' => \Marshmallow\Ecommerce\Cart\Nova\ShippingMethod::class,
+            'shipping_method_condition' => \Marshmallow\Ecommerce\Cart\Nova\ShippingMethodCondition::class,
             'vat_rate' => \Marshmallow\Priceable\Nova\VatRate::class,
         ],
     ],

@@ -66,7 +66,7 @@ class ShippingMethodCondition extends Resource
     public function fields(Request $request)
     {
         return [
-            BelongsTo::make(__('Shipping Method'), 'method', ShippingMethod::class),
+            BelongsTo::make(__('Shipping Method'), 'method', config('cart.nova.resources.shipping_method')),
             Currency::make(FieldNameHelper::priceLabel('Minimum amount'), 'minimum_amount')->displayUsing(function ($value) {
                 return Price::formatAmount($value);
             })->resolveUsing(function ($value) {

@@ -19,7 +19,7 @@ class AddDisplayIdToShoppingCartsTable extends Migration
         });
 
         $display_id = 0;
-        $carts = ShoppingCart::orderBy('created_at', 'asc')->get();
+        $carts = config('cart.models.shopping_cart')::orderBy('created_at', 'asc')->get();
         if ($carts->count()) {
             foreach ($carts as $cart) {
                 $display_id++;

@@ -65,8 +65,8 @@ class ShippingMethod extends Resource
     {
         return [
             Text::make(__('Name'), 'name')->sortable(),
-            BelongsTo::make(__('Vat rate'), 'vatrate', VatRate::class)->withoutTrashed(),
-            BelongsTo::make(__('Currency'), 'currency', Currency::class)->withoutTrashed(),
+            BelongsTo::make(__('Vat rate'), 'vatrate', config('cart.nova.resources.vat_rate'))->withoutTrashed(),
+            BelongsTo::make(__('Currency'), 'currency', config('cart.nova.resources.currency'))->withoutTrashed(),
             NovaCurrencyField::make(FieldNameHelper::priceLabel(), 'display_price')->displayUsing(function ($value) {
                 return Price::formatAmount($value);
             })->resolveUsing(function ($value) {
@@ -75,7 +75,7 @@ class ShippingMethod extends Resource
             DateTime::make('Valid from'),
             DateTime::make('Valid till'),
 
-            HasMany::make(__('Conditions'), 'conditions', ShippingMethodCondition::class),
+            HasMany::make(__('Conditions'), 'conditions', config('cart.nova.resources.shipping_method_condition')),
         ];
     }
 

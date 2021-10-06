@@ -37,7 +37,6 @@ class ShippingMethod extends Model
         );
     }
 
-
     /**
      * Statics
      */
