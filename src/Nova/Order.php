@@ -64,13 +64,17 @@ class Order extends Resource
                     BelongsTo::make(__('User'), 'user', config('cart.nova.resources.user'))->searchable()->nullable(),
                     DateTime::make(__('Created At'), 'created_at'),
                     Text::make(__('Invoice address'))->resolveUsing(function ($value, $resource) {
-                        return $resource->invoiceAddress()->getAsString();
+                        if ($resource->invoiceAddress()) {
+                            return $resource->invoiceAddress()->getAsString();
+                        }
                     })->hideFromIndex(),
                     Textarea::make(__('Note'), 'note'),
                 ],
                 'Shipping' => [
                     Text::make(__('Shipping address'))->resolveUsing(function ($value, $resource) {
-                        return $resource->shippingAddress()->getAsString();
+                        if ($resource->shippingAddress()) {
+                            return $resource->shippingAddress()->getAsString();
+                        }
                     })->hideFromIndex(),
                     BelongsTo::make(__('Type'), 'shippingMethod', config('cart.nova.resources.shipping_method'))->searchable()->nullable(),
                     Text::make(__('Track and Trace'), 'track_and_trace'),
