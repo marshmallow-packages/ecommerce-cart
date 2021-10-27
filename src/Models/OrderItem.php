@@ -2,6 +2,7 @@
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Marshmallow\Ecommerce\Cart\Cart;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Marshmallow\Ecommerce\Cart\Traits\ItemTotals;
@@ -21,7 +22,8 @@ class OrderItem extends Model
 
     public function product()
     {
-        return $this->belongsTo(config('cart.models.product'));
+        return $this->setConnection(Cart::$productConnection)
+            ->belongsTo(config('cart.models.product'));
     }
 
     public function scopeVisable(Builder $builder)

@@ -4,7 +4,6 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\HelperFunctions\Traits\Observer;
-use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class ShippingMethodCondition extends Model

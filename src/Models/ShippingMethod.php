@@ -2,16 +2,14 @@
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Marshmallow\Ecommerce\Cart\Cart;
 use Illuminate\Database\Eloquent\Model;
 use Marshmallow\Priceable\Facades\Price;
 use Illuminate\Database\Eloquent\Builder;
-use Marshmallow\Priceable\Models\VatRate;
-use Marshmallow\Priceable\Models\Currency;
 use Marshmallow\HelperFunctions\Traits\Observer;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Marshmallow\HelperFunctions\Traits\ModelHasDefaults;
-use Marshmallow\Ecommerce\Cart\Models\ShippingMethodCondition;
 use Marshmallow\HelperFunctions\Facades\Builder as BuilderHelper;
 
 class ShippingMethod extends Model
@@ -108,7 +106,8 @@ class ShippingMethod extends Model
 
     public function currency()
     {
-        return $this->belongsTo(config('cart.models.currency'));
+        return $this->setConnection(Cart::$currencyConnection)
+            ->belongsTo(config('cart.models.currency'));
     }
 
     public function conditions()

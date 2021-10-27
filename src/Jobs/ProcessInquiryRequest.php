@@ -34,10 +34,9 @@ class ProcessInquiryRequest implements ShouldQueue
     public function handle()
     {
         // Make an inquiry of the shopping cart
-        
+
         $inquiry = $this->cart->convertToInquiry();
-        
-        
+
         // mail('stef@marshmallow.dev', 'process inquiry', 'Henk');
         // throw new Exception("Error Processing Request", 1);
     }
