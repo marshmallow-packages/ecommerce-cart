@@ -76,6 +76,11 @@ trait Totals
         return $this->getTotalAmountWithoutShippingAndWithoutVat() + $this->getShippingAmountWithoutVat();
     }
 
+    public function getTotalVatAmountWithoutShipping()
+    {
+        return $this->getTotalAmountWithoutShipping() - $this->getTotalAmountWithoutShippingAndWithoutVat();
+    }
+
     public function getTotalVatAmount(): int
     {
         return $this->getTotalAmount() - $this->getTotalAmountWithoutVat();
