@@ -116,10 +116,6 @@ class Order extends Model
             'shipping_vat_amount' => $shoppingCart->getShippingVatAmount(),
         ]);
 
-        if ($order->wasRecentlyCreated) {
-            event(new OrderCreated($order));
-        }
-
         /**
          * Add the shopping cart items to the order
          */
@@ -149,6 +145,10 @@ class Order extends Model
                 'shopping_cart_item_id' => $item->id,
             ], $data);
         });
+
+        if ($order->wasRecentlyCreated) {
+            event(new OrderCreated($order));
+        }
 
         return $order;
     }
@@ -267,6 +267,14 @@ class Order extends Model
     {
         return $this->belongsTo(
             config('cart.models.shipping_method')
+        );
+    }
+
+    public function cart()
+    {
+        return $this->belongsTo(
+            config('cart.models.shopping_cart'),
+            'shopping_cart_id'
         );
     }
 }

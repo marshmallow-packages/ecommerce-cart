@@ -246,9 +246,15 @@ class ShoppingCart extends Model
      */
     public static function getBySession(): ?ShoppingCart
     {
-        return self::find(
+        $cart = self::find(
             session()->get(self::SESSION_KEY)
         );
+
+        if (!$cart->user && !$cart->customer && !$cart->prospect) {
+            return self::completelyNew();
+        }
+
+        return $cart;
     }
 
     public static function completelyNew(): ShoppingCart
