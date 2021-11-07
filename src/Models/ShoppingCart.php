@@ -250,7 +250,7 @@ class ShoppingCart extends Model
             session()->get(self::SESSION_KEY)
         );
 
-        if (!$cart->user && !$cart->customer && !$cart->prospect) {
+        if ($cart && !$cart->user && !$cart->customer && !$cart->prospect) {
             return self::completelyNew();
         }
 
