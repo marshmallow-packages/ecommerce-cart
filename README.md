@@ -7,7 +7,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor i
 ### Installatie
 
 ```
-composer require marshmallow/ecommerce-cart
+composer require marshmallow/cart
 ```
 
 ### Usage
