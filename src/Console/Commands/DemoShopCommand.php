@@ -40,13 +40,7 @@ class DemoShopCommand extends Command
     {
         $this->createMenuItems();
         $this->createRoutes();
-        $this->createPages();
         $this->info('Marshmallow ecommerce assets have been published');
-    }
-
-    public function createPages()
-    {
-        // Create shop page
     }
 
     public function createRoutes()

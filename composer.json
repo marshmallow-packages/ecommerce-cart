@@ -24,7 +24,6 @@
         "marshmallow/priceable": "^1.1",
         "marshmallow/products": "^1.2",
         "marshmallow/payable": "^1.0",
-        "marshmallow/pages": "^2.0",
         "marshmallow/dataset-country": "^1.2",
         "eminiarts/nova-tabs": "^1.4.3",
         "livewire/livewire": "^2.0"
