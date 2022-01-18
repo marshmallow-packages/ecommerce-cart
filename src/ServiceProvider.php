@@ -74,8 +74,11 @@ class ServiceProvider extends BaseServiceProvider
         $this->publishes([
             __DIR__ . '/../config/cart.php' => config_path('cart.php'),
             __DIR__ . '/../config/nova-menu.php' => config_path('nova-menu.php'),
-            __DIR__ . '/../config/cart-discount.php' => config_path('cart-discount.php'),
         ], 'ecommerce-config');
+
+        $this->publishes([
+            __DIR__ . '/../config/cart-discount.php' => config_path('cart-discount.php'),
+        ], 'ecommerce-discount-config');
 
         $this->publishes([
             __DIR__ . '/../resources/lang' => resource_path('lang/vendor/ecommerce/cart'),
