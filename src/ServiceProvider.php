@@ -19,7 +19,12 @@ class ServiceProvider extends BaseServiceProvider
     public function register()
     {
         $this->mergeConfigFrom(
-            __DIR__.'/../config/cart.php', 'cart'
+            __DIR__ . '/../config/cart.php',
+            'cart'
+        );
+        $this->mergeConfigFrom(
+            __DIR__ . '/../config/cart-discount.php',
+            'cart-discount'
         );
 
         $this->app->register(EventServiceProvider::class);
@@ -67,29 +72,33 @@ class ServiceProvider extends BaseServiceProvider
     protected function registerPublishebles()
     {
         $this->publishes([
-            __DIR__.'/../config/cart.php' => config_path('cart.php'),
-            __DIR__.'/../config/nova-menu.php' => config_path('nova-menu.php'),
+            __DIR__ . '/../config/cart.php' => config_path('cart.php'),
+            __DIR__ . '/../config/nova-menu.php' => config_path('nova-menu.php'),
         ], 'ecommerce-config');
 
         $this->publishes([
-            __DIR__.'/../resources/lang' => resource_path('lang/vendor/ecommerce/cart'),
+            __DIR__ . '/../config/cart-discount.php' => config_path('cart-discount.php'),
+        ], 'ecommerce-discount-config');
+
+        $this->publishes([
+            __DIR__ . '/../resources/lang' => resource_path('lang/vendor/ecommerce/cart'),
         ], 'ecommerce-translations');
 
         $this->publishes([
-            __DIR__.'/../resources/views' => resource_path('views/vendor/ecommerce/cart'),
+            __DIR__ . '/../resources/views' => resource_path('views/vendor/ecommerce/cart'),
         ], 'ecommerce-views');
 
         $this->publishes([
-            __DIR__.'/../public' => public_path('vendor/marshmallow/ecommerce'),
+            __DIR__ . '/../public' => public_path('vendor/marshmallow/ecommerce'),
         ], 'ecommerce-assets');
     }
 
     protected function loadResources()
     {
-        $this->loadRoutesFrom(__DIR__.'/../routes.php');
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-        $this->loadFactoriesFrom(__DIR__.'/../database/factories');
-        $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'ecommerce');
-        $this->loadViewsFrom(__DIR__.'/../resources/views', 'ecommerce');
+        $this->loadRoutesFrom(__DIR__ . '/../routes.php');
+        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        $this->loadFactoriesFrom(__DIR__ . '/../database/factories');
+        $this->loadTranslationsFrom(__DIR__ . '/../resources/lang', 'ecommerce');
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'ecommerce');
     }
 }

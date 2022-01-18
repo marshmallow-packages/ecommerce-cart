@@ -33,13 +33,18 @@ class Customer extends Resource
      */
     public static $title = 'first_name';
 
+    public function title()
+    {
+        return "{$this->first_name} {$this->last_name}";
+    }
+
     /**
      * The columns that should be searched.
      *
      * @var array
      */
     public static $search = [
-        'first_name', 'last_name',
+        'first_name', 'last_name', 'id', 'company_name', 'email', 'phone_number',
     ];
 
     /**

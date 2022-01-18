@@ -14,6 +14,7 @@ use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
+use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 
 class ShoppingCart extends Model
 {
@@ -97,8 +98,9 @@ class ShoppingCart extends Model
 
     public function shoppingCartContentChanged(ShoppingCartItem $item)
     {
-        if (!$item->isShippingCost()) {
+        if (!$item->isShippingCost() && !$item->isDiscount()) {
             $this->calculateShippingCost();
+            $this->recalculateDiscount();
         }
     }
 
@@ -176,6 +178,35 @@ class ShoppingCart extends Model
             $price = $shipping_method->getPriceHelper();
             $this->addCustom($shipping_method->name, $price, config('cart.models.shopping_cart_item')::TYPE_SHIPPING, false);
         }
+    }
+
+    protected function recalculateDiscount()
+    {
+        $shopping_cart_discount_item = $this->getDiscountItems()->first();
+        if ($shopping_cart_discount_item) {
+            $code = $shopping_cart_discount_item->description;
+            $shopping_cart_discount_item->delete();
+            $discount = config('cart.models.discount')::byCode($code);
+            $this->addDiscount($discount);
+        }
+    }
+
+    public function addDiscount(Discount $discount)
+    {
+        try {
+            $discount->isAllowed($this);
+            $price = $discount->calculateDiscountFromCart($this);
+            $this->addCustom($discount->discount_code, $price, config('cart.models.shopping_cart_item')::TYPE_DISCOUNT, false);
+        } catch (DiscountException $e) {
+            return $e->getMessage();
+        }
+    }
+
+    public function deleteDiscount()
+    {
+        $this->getDiscountItems()->each(function ($item) {
+            $item->delete();
+        });
     }
 
     public function connectUser($user)
