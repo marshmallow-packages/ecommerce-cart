@@ -15,8 +15,10 @@ return [
     'models' => [
         'user' => \App\Models\User::class,
         'product' => \Marshmallow\Product\Models\Product::class,
+        'product_category' => \Marshmallow\Product\Models\ProductCategory::class,
         'country' => \Marshmallow\Datasets\Country\Models\Country::class,
         'prospect' => \Marshmallow\Ecommerce\Cart\Models\Prospect::class,
+        'discount' => \Marshmallow\Ecommerce\Cart\Models\Discount::class,
         'customer' => \Marshmallow\Ecommerce\Cart\Models\Customer::class,
         'shopping_cart' => \Marshmallow\Ecommerce\Cart\Models\ShoppingCart::class,
         'shopping_cart_item' => \Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem::class,
@@ -36,6 +38,8 @@ return [
      */
     'nova' => [
         'resources' => [
+            'product' => \Marshmallow\Product\Nova\Product::class,
+            'product_category' => \Marshmallow\Product\Nova\ProductCategory::class,
             'prospect' => \Marshmallow\Ecommerce\Cart\Nova\Prospect::class,
             'customer' => \Marshmallow\Ecommerce\Cart\Nova\Customer::class,
             'order' => \Marshmallow\Ecommerce\Cart\Nova\Order::class,

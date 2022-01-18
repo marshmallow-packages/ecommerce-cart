@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 namespace Marshmallow\Ecommerce\Cart\Facades;
 

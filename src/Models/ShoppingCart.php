@@ -98,8 +98,9 @@ class ShoppingCart extends Model
 
     public function shoppingCartContentChanged(ShoppingCartItem $item)
     {
-        if (!$item->isShippingCost()) {
+        if (!$item->isShippingCost() && !$item->isDiscount()) {
             $this->calculateShippingCost();
+            $this->recalculateDiscount();
         }
     }
 
@@ -179,6 +180,17 @@ class ShoppingCart extends Model
         }
     }
 
+    protected function recalculateDiscount()
+    {
+        $shopping_cart_discount_item = $this->getDiscountItems()->first();
+        if ($shopping_cart_discount_item) {
+            $code = $shopping_cart_discount_item->description;
+            $shopping_cart_discount_item->delete();
+            $discount = config('cart.models.discount')::byCode($code);
+            $this->addDiscount($discount);
+        }
+    }
+
     public function addDiscount(Discount $discount)
     {
         try {
@@ -186,8 +198,16 @@ class ShoppingCart extends Model
             $price = $discount->calculateDiscountFromCart($this);
             $this->addCustom($discount->discount_code, $price, config('cart.models.shopping_cart_item')::TYPE_DISCOUNT, false);
         } catch (DiscountException $e) {
+            dd($e->getMessage());
             return $e->getMessage();
         }
+    }
+
+    public function deleteDiscount()
+    {
+        $this->getDiscountItems()->each(function ($item) {
+            $item->delete();
+        });
     }
 
     public function connectUser($user)

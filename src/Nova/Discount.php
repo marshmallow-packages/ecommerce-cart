@@ -15,9 +15,15 @@ use Laravel\Nova\Fields\Currency;
 use Laravel\Nova\Fields\DateTime;
 use Laravel\Nova\Fields\Textarea;
 use Marshmallow\Nova\Flexible\Flexible;
+use Marshmallow\Product\Models\Product;
+use Marshmallow\Product\Models\ProductCategory;
 use Marshmallow\NovaGenerateString\GenerateString;
+use Sloveniangooner\SearchableSelect\SearchableSelect;
 use Epartment\NovaDependencyContainer\NovaDependencyContainer;
+use Marshmallow\Ecommerce\Cart\Helpers\DiscountProductSelector;
+use Marshmallow\Ecommerce\Cart\Helpers\DiscountCustomerSelector;
 use Marshmallow\Ecommerce\Cart\Models\Discount as ModelsDiscount;
+use Marshmallow\Ecommerce\Cart\Helpers\DiscountProductCategorySelector;
 
 class Discount extends Resource
 {
@@ -70,16 +76,16 @@ class Discount extends Resource
                     ID::make(),
                     Heading::make(__('Voucher code')),
                     GenerateString::make(__('Code'), 'discount_code')
-                        ->creationRules('required', 'string', 'min:8')
-                        ->updateRules('nullable', 'string', 'min:8')
-                        ->length(8)
-                        ->excludeRules(['Symbols', 'Lowercase', 'Similar']),
+                        ->creationRules('required', 'string', 'min:' . config('cart-discount.voucher.min_length'))
+                        ->updateRules('nullable', 'string', 'min:' . config('cart-discount.voucher.min_length'))
+                        ->length(config('cart-discount.voucher.min_length'))
+                        ->excludeRules(config('cart-discount.voucher.exclude_rules')),
 
                     Heading::make(__('Types')),
                     Select::make(__('Discount type'), 'discount_type')->options([
-                        ModelsDiscount::TYPE_PERCENTAGE => 'Percentage',
-                        ModelsDiscount::TYPE_FIXED_AMOUNT => 'Fixed Amount',
-                        ModelsDiscount::TYPE_FREE_SHIPPING => 'Free Shipping',
+                        ModelsDiscount::TYPE_PERCENTAGE => __('Percentage'),
+                        ModelsDiscount::TYPE_FIXED_AMOUNT => __('Fixed Amount'),
+                        ModelsDiscount::TYPE_FREE_SHIPPING => __('Free Shipping'),
                     ])
                         ->withMeta($this->discount_type ? [] : ['value' => ModelsDiscount::TYPE_PERCENTAGE])
                         ->required()
@@ -89,19 +95,27 @@ class Discount extends Resource
                     NovaDependencyContainer::make([
                         Heading::make(__('Amount')),
                         Currency::make(__('Fixed amount'), 'fixed_amount')->required()
-                            ->rules('required'),
+                            ->rules('required')
+                            ->resolveUsing(function ($value) {
+                                if ($value) {
+                                    return $value / 100;
+                                }
+                            }),
                     ])->dependsOn('discount_type', 'fixed_amount'),
                     NovaDependencyContainer::make([
                         Heading::make(__('Amount')),
                         Number::make(__('Percentage amount'), 'percentage_amount')->required()
                             ->rules('required'),
                     ])->dependsOn('discount_type', 'percentage'),
+
+                    Boolean::make(__('Active'), 'is_active')
+                        ->withMeta($this->is_active !== null ? [] : ['value' => true])
                 ],
                 __('Applies to') => [
                     Select::make(__('Applies to'), 'applies_to')->options([
-                        ModelsDiscount::APPLIES_TO_ALL => 'All products',
-                        ModelsDiscount::APPLIES_TO_CATEGORIES => 'Specific categories',
-                        ModelsDiscount::APPLIES_TO_PRODUCTS => 'Specific products',
+                        ModelsDiscount::APPLIES_TO_ALL => __('All products'),
+                        ModelsDiscount::APPLIES_TO_CATEGORIES => __('Specific categories'),
+                        ModelsDiscount::APPLIES_TO_PRODUCTS => __('Specific products'),
                     ])
                         ->withMeta($this->applies_to ? [] : ['value' => ModelsDiscount::APPLIES_TO_ALL])
                         ->displayUsingLabels()
@@ -109,34 +123,24 @@ class Discount extends Resource
                         ->rules('required'),
 
                     NovaDependencyContainer::make([
-                        Flexible::make(__('Categories'), 'applies_to_product_categories')
-                            ->addLayout(__('Category'), 'category', [
-                                //
-                            ])
-                            ->fullWidth()
-                            ->collapsed()
-                            ->button(__('Add category'))
-                            ->required()
-                            ->rules('required'),
+                        SearchableSelect::make(__('Categories'), 'applies_to_product_categories')
+                            ->resource(config('cart.nova.resources.product_category'))
+                            ->multiple()
+                            ->displayUsingLabels()
                     ])->dependsOn('applies_to', 'specific_categories'),
 
                     NovaDependencyContainer::make([
-                        Flexible::make(__('Products'), 'applies_to_products')
-                            ->addLayout(__('Product'), 'product', [
-                                //
-                            ])
-                            ->fullWidth()
-                            ->collapsed()
-                            ->button(__('Add product'))
-                            ->required()
-                            ->rules('required'),
+                        SearchableSelect::make(__('Products'), 'applies_to_products')
+                            ->resource(config('cart.nova.resources.product'))
+                            ->multiple()
+                            ->displayUsingLabels()
                     ])->dependsOn('applies_to', 'specific_products'),
                 ],
                 __('Requirements') => [
                     Select::make(__('Minimum requirements'), 'prerequisite_type')->options([
-                        ModelsDiscount::PREREQUISITE_NONE => 'None',
-                        ModelsDiscount::PREREQUISITE_PURCHASE_AMOUNT => 'Minimum purchase amount (€)',
-                        ModelsDiscount::PREREQUISITE_QUANTITY => 'Minimum quantity of items',
+                        ModelsDiscount::PREREQUISITE_NONE => __('None'),
+                        ModelsDiscount::PREREQUISITE_PURCHASE_AMOUNT => __('Minimum purchase amount (€)'),
+                        ModelsDiscount::PREREQUISITE_QUANTITY => __('Minimum quantity of items'),
                     ])
                         ->withMeta($this->prerequisite_type ? [] : ['value' => ModelsDiscount::PREREQUISITE_NONE])
                         ->displayUsingLabels()
@@ -147,7 +151,12 @@ class Discount extends Resource
                         Currency::make(__('Minimum purchase amount'), 'prerequisite_purchase_amount')
                             ->hideFromIndex()
                             ->required()
-                            ->rules('required'),
+                            ->rules('required')
+                            ->resolveUsing(function ($value) {
+                                if ($value) {
+                                    return $value / 100;
+                                }
+                            }),
                     ])->dependsOn('prerequisite_type', 'prerequisite_purchase_amount'),
 
                     NovaDependencyContainer::make([
@@ -161,23 +170,21 @@ class Discount extends Resource
                 ],
                 __('Eligble for') => [
                     Select::make(__('Customer eligibility'), 'eligible_for')->options([
-                        ModelsDiscount::ELIGIBLE_FOR_ALL => 'All customers',
-                        ModelsDiscount::ELIGIBLE_FOR_CUSTOMERS => 'Specific customers',
-                        ModelsDiscount::ELIGIBLE_FOR_EMAILS => 'Specific emailaddresses',
+                        ModelsDiscount::ELIGIBLE_FOR_ALL => __('All customers'),
+                        ModelsDiscount::ELIGIBLE_FOR_CUSTOMERS => __('Specific customers'),
+                        ModelsDiscount::ELIGIBLE_FOR_EMAILS => __('Specific emailaddresses'),
                     ])
                         ->withMeta($this->eligible_for ? [] : ['value' => ModelsDiscount::ELIGIBLE_FOR_ALL])
                         ->displayUsingLabels()
                         ->required()->rules('required'),
 
                     NovaDependencyContainer::make([
-                        Flexible::make(__('Customers'), 'eligible_for_customers')
-                            ->addLayout(__('Customer'), 'customer', [
-                                //
-                            ])
-                            ->fullWidth()
-                            ->collapsed()
-                            ->button(__('Add customer'))
-                            ->required()->rules('required'),
+                        SearchableSelect::make(__('Customers'), 'eligible_for_customers')
+                            ->resource(config('cart.nova.resources.customer'))
+                            ->multiple()
+                            ->displayUsingLabels()
+                            ->required()
+                            ->rules('required')
                     ])->dependsOn('eligible_for', 'eligible_for_customers'),
 
                     NovaDependencyContainer::make([

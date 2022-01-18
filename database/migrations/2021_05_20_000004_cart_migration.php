@@ -32,6 +32,7 @@ return new class extends Migration
             $table->boolean('is_once_per_customer')->default(false);
             $table->datetime('starts_at')->nullable()->default(null);
             $table->datetime('ends_at')->nullable()->default(null);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
         });
