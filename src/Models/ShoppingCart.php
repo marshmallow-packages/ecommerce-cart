@@ -198,7 +198,6 @@ class ShoppingCart extends Model
             $price = $discount->calculateDiscountFromCart($this);
             $this->addCustom($discount->discount_code, $price, config('cart.models.shopping_cart_item')::TYPE_DISCOUNT, false);
         } catch (DiscountException $e) {
-            dd($e->getMessage());
             return $e->getMessage();
         }
     }
