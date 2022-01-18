@@ -46,6 +46,11 @@ class ShoppingCartItem extends Model
         return ($this->type === self::TYPE_SHIPPING);
     }
 
+    public function isDiscount()
+    {
+        return ($this->type === self::TYPE_DISCOUNT);
+    }
+
     public function setQuantity(int $quantity): self
     {
         $this->update([

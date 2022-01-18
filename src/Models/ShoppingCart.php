@@ -14,6 +14,7 @@ use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
+use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 
 class ShoppingCart extends Model
 {
@@ -173,6 +174,17 @@ class ShoppingCart extends Model
         if ($shipping_method) {
             $price = $shipping_method->getPriceHelper();
             $this->addCustom($shipping_method->name, $price, config('cart.models.shopping_cart_item')::TYPE_SHIPPING, false);
+        }
+    }
+
+    public function addDiscount(Discount $discount)
+    {
+        try {
+            $discount->isAllowed($this);
+            $price = $discount->calculateDiscountFromCart($this);
+            $this->addCustom($discount->discount_code, $price, config('cart.models.shopping_cart_item')::TYPE_DISCOUNT, false);
+        } catch (DiscountException $e) {
+            return $e->getMessage();
         }
     }
 

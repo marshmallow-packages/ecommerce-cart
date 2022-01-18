@@ -97,7 +97,7 @@ class OrderItem extends Resource
                      * Discount prices
                      */
                     Heading::make(__('Discount')),
-                    Text::make(__('Price'), 'display_discount')->resolveUsing(function ($value, $resource) {
+                    Text::make(__('Discount'), 'display_discount')->resolveUsing(function ($value, $resource) {
                         return $resource->getFormatted($value);
                     }),
                     Text::make(__('Excl. VAT'), 'discount_excluding_vat')->resolveUsing(function ($value, $resource) {

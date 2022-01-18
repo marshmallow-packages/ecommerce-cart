@@ -26,7 +26,10 @@
         "marshmallow/payable": "^1.0",
         "marshmallow/pages": "^2.0",
         "marshmallow/dataset-country": "^1.2",
-        "eminiarts/nova-tabs": "^1.4.3",
+        "marshmallow/nova-flexible": "^1.7",
+        "marshmallow/nova-field-string-generator": "^1.1",
+        "eminiarts/nova-tabs": "^1.4",
+        "epartment/nova-dependency-container": "^1.3",
         "livewire/livewire": "^2.0"
     },
     "autoload": {

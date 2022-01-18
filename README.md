@@ -42,6 +42,7 @@ php artisan marshmallow:resource ShippingMethod Ecommerce\\Cart
 php artisan marshmallow:resource ShippingMethodCondition Ecommerce\\Cart
 php artisan marshmallow:resource Order Ecommerce\\Cart
 php artisan marshmallow:resource OrderItem Ecommerce\\Cart
+php artisan marshmallow:resource Discount Ecommerce\\Cart
 php artisan marshmallow:resource Page Pages
 php artisan marshmallow:resource Route Seoable
 ```
