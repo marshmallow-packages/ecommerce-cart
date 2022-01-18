@@ -22,7 +22,8 @@ class CartMiddleware
 
         $cart = config('cart.models.shopping_cart')::getBySession();
         if (!$cart) {
-            $cart = config('cart.models.shopping_cart')::completelyNew();
+            $cart_model_class = config('cart.models.shopping_cart');
+            $cart = new $cart_model_class;
         }
 
         if ($cart->confirmed_at) {

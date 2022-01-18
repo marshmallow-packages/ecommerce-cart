@@ -7,7 +7,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor i
 ### Installatie
 
 ```
-composer require marshmallow/ecommerce-cart
+composer require marshmallow/cart
 ```
 
 ### Usage
@@ -43,17 +43,7 @@ php artisan marshmallow:resource ShippingMethodCondition Ecommerce\\Cart
 php artisan marshmallow:resource Order Ecommerce\\Cart
 php artisan marshmallow:resource OrderItem Ecommerce\\Cart
 php artisan marshmallow:resource Discount Ecommerce\\Cart
-php artisan marshmallow:resource Page Pages
 php artisan marshmallow:resource Route Seoable
-```
-
-# Routes
-
-Add this to you `routes/web.php`.
-
-```php
-\Marshmallow\Seoable\Seoable::routes();
-\Marshmallow\Pages\Facades\Page::loadRoutes();
 ```
 
 # Seed tables
@@ -95,16 +85,6 @@ public function tools()
         new \OptimistDigital\MenuBuilder\MenuBuilder,
     ];
 }
-```
-
-# Menu linkables
-
-Add the following linkables to your `config/nova-menu.php` file.
-
-```php
-'linkable_models' => [
-    \Marshmallow\Pages\Classes\PageLinkable::class, // If you already have a link to your page resource, you dont need this one.
-],
 ```
 
 # Cart methods

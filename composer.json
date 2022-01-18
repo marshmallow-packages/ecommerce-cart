@@ -21,16 +21,16 @@
     "minimum-stability": "dev",
     "require": {
         "php": "^7.4|^8.0",
-        "marshmallow/priceable": "^1.1",
-        "marshmallow/products": "^1.2",
-        "marshmallow/payable": "^1.0",
-        "marshmallow/pages": "^2.0",
-        "marshmallow/dataset-country": "^1.2",
         "marshmallow/nova-flexible": "^1.7",
         "marshmallow/nova-field-string-generator": "^1.1",
-        "eminiarts/nova-tabs": "^1.4",
         "epartment/nova-dependency-container": "^1.3",
-        "livewire/livewire": "^2.0"
+        "marshmallow/priceable": "^v1.5.2",
+        "marshmallow/products": "^v1.2.6",
+        "marshmallow/payable": "^v1.5.0",
+        "marshmallow/dataset-country": "^v1.2.2",
+        "marshmallow/addressable": "^v1.6.1",
+        "eminiarts/nova-tabs": "^1.4.6",
+        "livewire/livewire": "^v2.8.2"
     },
     "autoload": {
         "psr-4": {

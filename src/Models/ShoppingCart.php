@@ -69,8 +69,10 @@ class ShoppingCart extends Model
 
     public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
     {
+        $cart = ($this->id) ? $this : config('cart.models.shopping_cart')::completelyNew();
+
         $cart_item = config('cart.models.shopping_cart_item')::firstOrNew([
-            'shopping_cart_id' => $this->id,
+            'shopping_cart_id' => $cart->id,
             'product_id' => ($product) ? $product->id : null,
             'vatrate_id' => $price->vatrate->id,
             'currency_id' => $price->currency->id,
@@ -258,9 +260,15 @@ class ShoppingCart extends Model
      */
     public static function getBySession(): ?ShoppingCart
     {
-        return self::find(
+        $cart = self::find(
             session()->get(self::SESSION_KEY)
         );
+
+        if ($cart && !$cart->user && !$cart->customer && !$cart->prospect) {
+            return self::completelyNew();
+        }
+
+        return $cart;
     }
 
     public static function completelyNew(): ShoppingCart

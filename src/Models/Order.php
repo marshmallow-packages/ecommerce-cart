@@ -116,39 +116,50 @@ class Order extends Model
             'shipping_vat_amount' => $shoppingCart->getShippingVatAmount(),
         ]);
 
-        if ($order->wasRecentlyCreated) {
-            event(new OrderCreated($order));
-        }
-
         /**
          * Add the shopping cart items to the order
          */
         $shoppingCart->items->each(function ($item) use ($order) {
-            $data = [
-                'order_id' => $order->id,
-                'shopping_cart_item_id' => $item->id,
-                'product_id' => $item->product_id,
-                'vatrate_id' => $item->vatrate_id,
-                'currency_id' => $item->currency_id,
-                'description' => $item->description,
-                'quantity' => $item->quantity,
-                'type' => $item->type,
-                'display_price' => $item->display_price,
-                'price_excluding_vat' => $item->price_excluding_vat,
-                'price_including_vat' => $item->price_including_vat,
-                'vat_amount' => $item->vat_amount,
-                'display_discount' => 0,
-                'discount_excluding_vat' => 0,
-                'discount_including_vat' => 0,
-                'discount_vat_amount' => 0,
-                'visible_in_cart' => $item->visible_in_cart,
-            ];
 
-            config('cart.models.order_item')::updateOrCreate([
-                'order_id' => $order->id,
-                'shopping_cart_item_id' => $item->id,
-            ], $data);
+            $item_created = config('cart.models.order_item')::where('order_id', $order->id)
+                ->where('shopping_cart_item_id', $item->id)
+                ->first();
+
+            /**
+             * Check if this item is already created.
+             */
+            if (!$item_created) {
+
+                $data = [
+                    'order_id' => $order->id,
+                    'shopping_cart_item_id' => $item->id,
+                    'product_id' => $item->product_id,
+                    'vatrate_id' => $item->vatrate_id,
+                    'currency_id' => $item->currency_id,
+                    'description' => $item->description,
+                    'quantity' => $item->quantity,
+                    'type' => $item->type,
+                    'display_price' => $item->display_price,
+                    'price_excluding_vat' => $item->price_excluding_vat,
+                    'price_including_vat' => $item->price_including_vat,
+                    'vat_amount' => $item->vat_amount,
+                    'display_discount' => 0,
+                    'discount_excluding_vat' => 0,
+                    'discount_including_vat' => 0,
+                    'discount_vat_amount' => 0,
+                    'visible_in_cart' => $item->visible_in_cart,
+                ];
+
+                config('cart.models.order_item')::updateOrCreate([
+                    'order_id' => $order->id,
+                    'shopping_cart_item_id' => $item->id,
+                ], $data);
+            }
         });
+
+        if ($order->wasRecentlyCreated) {
+            event(new OrderCreated($order));
+        }
 
         return $order;
     }
@@ -267,6 +278,14 @@ class Order extends Model
     {
         return $this->belongsTo(
             config('cart.models.shipping_method')
+        );
+    }
+
+    public function cart()
+    {
+        return $this->belongsTo(
+            config('cart.models.shopping_cart'),
+            'shopping_cart_id'
         );
     }
 }
