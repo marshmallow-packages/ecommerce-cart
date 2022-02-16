@@ -53,6 +53,14 @@ class ShippingMethod extends Model
             return null;
         }
 
+        /**
+         * Check if there is an item in this cart that excludes
+         * shipping costs for this cart.
+         */
+        if ($cart->hasExcludedShipping()) {
+            return null;
+        }
+
         $total_price = $cart->getTotalAmountWithoutShipping();
         foreach ($active_methods as $method) {
             $conditions = $method->conditions;
