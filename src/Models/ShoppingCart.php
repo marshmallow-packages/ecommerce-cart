@@ -162,7 +162,7 @@ class ShoppingCart extends Model
         return null;
     }
 
-    public function hasExcludedShipping()
+    public function hasExcludedShipping(): bool
     {
         return false;
     }
