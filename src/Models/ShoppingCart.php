@@ -162,6 +162,11 @@ class ShoppingCart extends Model
         return null;
     }
 
+    public function hasExcludedShipping()
+    {
+        return false;
+    }
+
     /**
      * Protected
      */
