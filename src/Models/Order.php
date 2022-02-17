@@ -52,14 +52,22 @@ class Order extends Model
          */
         $ignore_columns = ['id', 'addressable_type', 'addressable_id', 'created_at', 'updated_at', 'deleted_at'];
 
-        if ($address = $shoppingCart->shippingAddress()->withTrashed()->first()) {
-            $prospect_shipping_address = collect(
-                $address->toArray()
-            )
-                ->except($ignore_columns)
-                ->toArray();
+        if ($shipping_address = $shoppingCart->shippingAddress()->withTrashed()->first()) {
 
-            $shipping_address = $customer->addresses()->create($prospect_shipping_address);
+            /**
+             * Connect the address to the customer if we are dealing with a prospect.
+             */
+            if ($shipping_address->addressable_type == config('cart.models.prospect')) {
+
+                $prospect_shipping_address = collect(
+                    $shipping_address->toArray()
+                )
+                    ->except($ignore_columns)
+                    ->toArray();
+
+                $shipping_address = $customer->addresses()->create($prospect_shipping_address);
+            }
+
             $invoice_address = $shipping_address;
 
             /**
@@ -67,14 +75,20 @@ class Order extends Model
              * another one.
              */
             if ($shoppingCart->shipping_address_id != $shoppingCart->invoice_address_id) {
-                $prospect_invoice_address = collect(
-                    $shoppingCart->invoiceAddress()->withTrashed()->first()->toArray()
-                )
-                    ->except($ignore_columns)
-                    ->toArray();
 
-                $invoice_address = $customer->addresses()->create($prospect_invoice_address);
+                $invoice_address = $shoppingCart->invoiceAddress()->withTrashed()->first();
+
+                if ($invoice_address->addressable_type == config('cart.models.prospect')) {
+                    $prospect_invoice_address = collect(
+                        $invoice_address->toArray()
+                    )
+                        ->except($ignore_columns)
+                        ->toArray();
+
+                    $invoice_address = $customer->addresses()->create($prospect_invoice_address);
+                }
             }
+
 
             /**
              * Delete the address of the prospect. We will be deleting
