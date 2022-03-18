@@ -24,7 +24,7 @@
         "marshmallow/nova-flexible": "^1.7",
         "marshmallow/nova-field-string-generator": "^1.1",
         "epartment/nova-dependency-container": "^1.3",
-        "marshmallow/priceable": "^v1.5.2",
+        "marshmallow/priceable": "^v2.0",
         "marshmallow/products": "^v1.2.6",
         "marshmallow/payable": "^v1.5.0",
         "marshmallow/dataset-country": "^v1.2.2",
