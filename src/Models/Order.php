@@ -113,7 +113,7 @@ class Order extends Model
             'user_id' => $shoppingCart->user_id,
             'shipping_address_id' => (isset($shipping_address) && $shipping_address) ? $shipping_address->id : null,
             'invoice_address_id' => (isset($invoice_address) && $invoice_address) ? $invoice_address->id : null,
-            'shipping_method_id' => config('cart.models.shipping_method')::first()->id,
+            'shipping_method_id' => config('cart.models.shipping_method')::first()?->id,
             'note' => $shoppingCart->note,
             'currency_id' => config('cart.models.currency')::first()->id,
             'display_price' => $shoppingCart->getTotalAmount(),
