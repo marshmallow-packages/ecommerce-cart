@@ -67,11 +67,13 @@ class ShoppingCart extends Model
         );
     }
 
-    public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null): ShoppingCartItem
+    public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, Product $product = null, bool $should_combine_products = true): ShoppingCartItem
     {
         $cart = ($this->id) ? $this : config('cart.models.shopping_cart')::completelyNew();
 
-        $cart_item = config('cart.models.shopping_cart_item')::firstOrNew([
+        $method = $should_combine_products ? 'firstOrNew' : 'create';
+
+        $cart_item = config('cart.models.shopping_cart_item')::{$method}([
             'shopping_cart_id' => $cart->id,
             'product_id' => ($product) ? $product->id : null,
             'vatrate_id' => $price->vatrate->id,
