@@ -20,19 +20,26 @@
     },
     "minimum-stability": "dev",
     "require": {
-        "php": "^7.4|^8.0",
-        "marshmallow/nova-flexible": "^1.7",
-        "marshmallow/nova-field-string-generator": "^1.1",
-        "epartment/nova-dependency-container": "^1.3",
-        "marshmallow/priceable": "^v2.0",
-        "marshmallow/products": "^v2.0",
-        "marshmallow/payable": "^v1.5",
-        "marshmallow/dataset-country": "^v1.2",
-        "marshmallow/addressable": "^v1.6",
-        "eminiarts/nova-tabs": "^1.4",
-        "sloveniangooner/searchable-select": "^1.3",
-        "livewire/livewire": "^v2.8"
+        "php": "^8.0",
+        "marshmallow/nova-flexible": "^v2.0.0",
+        "marshmallow/nova-field-string-generator": "^v2.0.0",
+        "epartment/nova-dependency-container": "^1.3.3",
+        "marshmallow/priceable": "^v2.2.0",
+        "marshmallow/products": "^v2.1.0",
+        "marshmallow/payable": "^v2.0.0",
+        "marshmallow/dataset-country": "^v1.2.2",
+        "marshmallow/addressable": "^v1.6.1",
+        "eminiarts/nova-tabs": "^2.0.3",
+        "sloveniangooner/searchable-select": "^1.3.2",
+        "livewire/livewire": "^v2.10.5",
+        "laravel/nova": "^4.0"
     },
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://nova.laravel.com"
+        }
+    ],
     "autoload": {
         "psr-4": {
             "Marshmallow\\Ecommerce\\Cart\\": "src"
