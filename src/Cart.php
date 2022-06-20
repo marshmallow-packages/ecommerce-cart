@@ -10,6 +10,20 @@ class Cart
     public static $productConnection = null;
     public static $currencyConnection = null;
 
+    public function addToRequest($request, $cart)
+    {
+        $request->attributes->add([
+            'cart' => $cart,
+        ]);
+
+        return $request;
+    }
+
+    public function getFromRequest()
+    {
+        return request()->attributes->get('cart');
+    }
+
     public function getUserGuard()
     {
         if ($guard = config('cart.customer_guard')) {

@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
 
 class AddProductsToShoppingCartRequest extends FormRequest
 {
@@ -13,7 +14,7 @@ class AddProductsToShoppingCartRequest extends FormRequest
      */
     public function authorize()
     {
-        return request()->cart->authorized();
+        return Cart::getFromRequest()->authorized();
     }
 
     /**

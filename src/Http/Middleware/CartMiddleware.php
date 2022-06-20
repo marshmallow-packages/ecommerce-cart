@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Http\Middleware;
 
 use Closure;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\HelperFunctions\Facades\URL;
 
 class CartMiddleware
@@ -30,9 +31,7 @@ class CartMiddleware
             $cart = config('cart.models.shopping_cart')::newWithSameProspect($cart);
         }
 
-        $request->merge([
-            'cart' => $cart,
-        ]);
+        $request = Cart::addToRequest($request, $cart);
 
         return $next($request);
     }
