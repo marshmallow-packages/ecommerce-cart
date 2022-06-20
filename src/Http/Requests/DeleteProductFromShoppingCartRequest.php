@@ -3,6 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
 
 class DeleteProductFromShoppingCartRequest extends FormRequest
 {
@@ -13,11 +14,12 @@ class DeleteProductFromShoppingCartRequest extends FormRequest
      */
     public function authorize()
     {
-        if (!request()->cart->authorized()) {
+        $cart = Cart::getFromRequest();
+        if (!$cart->authorized()) {
             return false;
         }
 
-        if (request()->cart->id !== request()->item->shopping_cart_id) {
+        if ($cart->id !== request()->item->shopping_cart_id) {
             return false;
         }
 
