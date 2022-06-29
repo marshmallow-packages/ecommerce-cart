@@ -122,4 +122,12 @@ class ShoppingCartItem extends Model
                 'product_id'
             );
     }
+
+    public function vatrate()
+    {
+        return $this->belongsTo(
+            config('cart.models.vat_rate'),
+            'vatrate_id'
+        );
+    }
 }

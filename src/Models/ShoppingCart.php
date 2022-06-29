@@ -13,6 +13,7 @@ use Marshmallow\Addressable\Models\Address;
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
+use Marshmallow\Payable\Traits\PayableWithItems;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 
@@ -21,6 +22,7 @@ class ShoppingCart extends Model
     use Totals;
     use Payable;
     use PriceFormatter;
+    use PayableWithItems;
 
     const SESSION_KEY = 'cart';
 
@@ -164,6 +166,16 @@ class ShoppingCart extends Model
         return null;
     }
 
+    public function getCustomerPhonenumber(): ?string
+    {
+        $customer = $this->getCustomer();
+        if ($customer && $phone_number = $customer->phone_number) {
+            return $phone_number;
+        }
+
+        return null;
+    }
+
     public function hasExcludedShipping(): bool
     {
         return false;
@@ -223,7 +235,6 @@ class ShoppingCart extends Model
         $this->update();
 
         if (method_exists($user, 'addresses')) {
-
             $default_shipping = $user->getDefaultAddress(AddressType::SHIPPING);
             if ($default_shipping && $this->doesNotHaveShippingAddress()) {
                 $this->connectShippingAddress($default_shipping);
