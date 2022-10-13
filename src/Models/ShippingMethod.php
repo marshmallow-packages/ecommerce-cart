@@ -25,6 +25,28 @@ class ShippingMethod extends Model
 
     protected $guarded = [];
 
+    public static function boot()
+    {
+        parent::boot();
+
+        static::saving(function ($shipping_method) {
+            if (config('priceable.nova.prices_are_including_vat')) {
+
+                /**
+                 * The added price is including the VAT. We need to calculate
+                 * the price without the VAT.
+                 */
+                $price_excluding_vat = ($shipping_method->display_price / (100 + $shipping_method->vatrate->rate)) * 100;
+            } else {
+                $price_excluding_vat = $shipping_method->display_price;
+            }
+
+            $shipping_method->price_excluding_vat = $price_excluding_vat;
+            $shipping_method->price_including_vat = $price_excluding_vat * $shipping_method->vatrate->multiplier();
+            $shipping_method->vat_amount = $shipping_method->price_including_vat - $shipping_method->price_excluding_vat;
+        });
+    }
+
     /**
      * Publics
      */
@@ -156,23 +178,5 @@ class ShippingMethod extends Model
     public static function getObserver(): string
     {
         return \Marshmallow\Priceable\Observers\PriceObserver::class;
-    }
-
-    public function __saving()
-    {
-        if (config('priceable.nova.prices_are_including_vat')) {
-
-            /**
-             * The added price is including the VAT. We need to calculate
-             * the price without the VAT.
-             */
-            $price_excluding_vat = ($this->display_price / (100 + $this->vatrate->rate)) * 100;
-        } else {
-            $price_excluding_vat = $this->display_price;
-        }
-
-        $this->price_excluding_vat = $price_excluding_vat;
-        $this->price_including_vat = $price_excluding_vat * $this->vatrate->multiplier();
-        $this->vat_amount = $this->price_including_vat - $this->price_excluding_vat;
     }
 }
