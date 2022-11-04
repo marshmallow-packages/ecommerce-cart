@@ -2,6 +2,7 @@
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Str;
 use Marshmallow\Priceable\Price;
 use Illuminate\Database\Eloquent\Model;
@@ -39,7 +40,6 @@ class Discount extends Model
         'is_once_per_customer' => 'boolean',
         'applies_to_products' => 'array',
         'applies_to_product_categories' => 'array',
-        'eligible_for_customers' => 'array',
     ];
 
     protected static function boot()
@@ -89,7 +89,6 @@ class Discount extends Model
 
             if ($discount->eligible_for == self::ELIGIBLE_FOR_CUSTOMERS) {
                 $customers = $discount->eligible_for_customers;
-                $customers = (is_array($customers)) ? $customers : json_decode($customers);
                 if (empty($customers)) {
                     $discount->eligible_for = self::ELIGIBLE_FOR_ALL;
                 }
@@ -119,32 +118,20 @@ class Discount extends Model
         }
     }
 
-    public function getEligibleForEmailsAttribute($email_addresses)
+    public function eligibleForEmails(): Attribute
     {
-        $email_addresses = is_array($email_addresses) ? $email_addresses : json_decode($email_addresses, true);
-        if (!is_array($email_addresses)) {
-            return null;
-        }
-
-        $email_addresses = array_filter($email_addresses);
-        if (empty($email_addresses)) {
-            return null;
-        }
-
-        return $email_addresses;
+        return new Attribute(
+            set: fn ($value) => json_encode(array_filter(explode("\r\n", $value))),
+            get: fn ($value) => ($value ? join("\n", json_decode($value)) : ''),
+        );
     }
 
-    public function setEligibleForEmailsAttribute($email_addresses)
+    public function eligibleForCustomers(): Attribute
     {
-        if (!is_array($email_addresses)) {
-            $email_addresses = collect(explode("\n", $email_addresses))->map(function ($email_address) {
-                return (string) Str::of($email_address)->replace("\r", '')->trim();
-            })->reject(function ($email_address) {
-                return !$email_address;
-            })->toArray();
-        }
-
-        $this->attributes['eligible_for_emails'] = empty($email_addresses) ? null : $email_addresses;
+        return new Attribute(
+            set: fn ($value) => json_encode(array_filter(explode("\r\n", $value))),
+            get: fn ($value) => ($value ? join("\n", json_decode($value)) : ''),
+        );
     }
 
     public static function byCode($code)
