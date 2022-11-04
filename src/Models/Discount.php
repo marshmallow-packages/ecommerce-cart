@@ -126,12 +126,22 @@ class Discount extends Model
         );
     }
 
+    public function eligibleForEmailsAsArray()
+    {
+        return json_decode($this->attributes['eligible_for_emails'], true);
+    }
+
     public function eligibleForCustomers(): Attribute
     {
         return new Attribute(
             set: fn ($value) => json_encode(array_filter(explode("\r\n", $value))),
             get: fn ($value) => ($value ? join("\n", json_decode($value)) : ''),
         );
+    }
+
+    public function eligibleForCustomersAsArray()
+    {
+        return json_decode($this->attributes['eligible_for_customers'], true);
     }
 
     public static function byCode($code)
@@ -193,13 +203,13 @@ class Discount extends Model
                 throw new DiscountException(__('This voucher can only be used by some customers. Please log in to your account and try again.'));
             }
 
-            if (!in_array($customer->id, $this->eligible_for_customers)) {
+            if (!in_array($customer->id, $this->eligibleForCustomersAsArray())) {
                 throw new DiscountException(__('This voucher can only be used by some customers. Sadly, you are not one of them.'));
             }
         } elseif ($this->eligible_for == self::ELIGIBLE_FOR_EMAILS) {
 
             $customer = $cart->getCustomer();
-            if (!in_array($customer->email, $this->eligible_for_emails)) {
+            if (!in_array($customer->email, $this->eligibleForEmailsAsArray())) {
                 throw new DiscountException(__('This voucher can only be used by some customers. Sadly, you are not one of them.'));
             }
         }
