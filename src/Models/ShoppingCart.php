@@ -218,6 +218,7 @@ class ShoppingCart extends Model
 
     public function connectUser($user)
     {
+        $user = $user->fresh();
         $this->user_id = $user->id;
         $this->customer_id = ($user->customer) ? $user->customer->id : null;
         $this->update();
