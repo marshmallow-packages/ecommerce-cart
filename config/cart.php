@@ -1,5 +1,8 @@
 <?php
 
+use Marshmallow\Ecommerce\Cart\Listeners\ConnectExistingCartToUser;
+use Marshmallow\Ecommerce\Cart\Listeners\DisconnectExistingCartToUser;
+
 /**
  * All classes can be overrules by your own custom classes.
  * The classes that you overrule should extend the original version
@@ -94,4 +97,16 @@ return [
      * a loggedin user to the shopping carts
      */
     'customer_guard' => 'web',
+
+    /**
+     * Listeners
+     */
+    'listeners' => [
+        'login' => [
+            ConnectExistingCartToUser::class,
+        ],
+        'logout' => [
+            DisconnectExistingCartToUser::class,
+        ],
+    ],
 ];
