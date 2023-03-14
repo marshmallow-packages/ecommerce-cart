@@ -51,6 +51,7 @@ class ShoppingCart extends Model
             if (!$cart->prospect_id) {
                 $prospect = config('cart.models.prospect')::create([]);
                 $cart->prospect_id = $prospect->id;
+                $cart->customer_id = $prospect->getCustomer()?->id;
             }
         });
     }
@@ -182,6 +183,18 @@ class ShoppingCart extends Model
         }
 
         return null;
+    }
+
+
+    public function addCustomerIfExists(): void
+    {
+        if ($this->customer_id) {
+            return;
+        }
+
+        $prospect = $this->prospect;
+        $this->customer_id = $prospect->getCustomer()?->id;
+        $this->saveQuietly();
     }
 
     public function hasExcludedShipping(): bool
