@@ -34,7 +34,7 @@ class Order extends Model
         $order = self::where('shopping_cart_id', $shoppingCart->id)->first();
         if ($order) {
             if ($order->customer_id && !$shoppingCart->customer_id) {
-                $shoppingCart->updateQuietly([
+                $shoppingCart->update([
                     'customer_id' => $order->customer_id
                 ]);
             }
@@ -136,7 +136,7 @@ class Order extends Model
         ]);
 
         if ($order->customer_id && !$shoppingCart->customer_id) {
-            $shoppingCart->updateQuietly([
+            $shoppingCart->update([
                 'customer_id' => $order->customer_id
             ]);
         }
