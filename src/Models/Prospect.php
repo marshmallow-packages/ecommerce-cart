@@ -46,6 +46,16 @@ class Prospect extends Model
         return $customer;
     }
 
+    public function getCustomer()
+    {
+        if ($customer = config('cart.models.customer')::where('prospect_id', $this->id)->first()) {
+            return $customer;
+        }
+        $customer = config('cart.models.customer')::where('email', $this->email)->whereNotNull('email')->first();
+
+        return $customer;
+    }
+
     /**
      * Relationships
      */
