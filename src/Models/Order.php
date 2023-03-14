@@ -33,6 +33,11 @@ class Order extends Model
          */
         $order = self::where('shopping_cart_id', $shoppingCart->id)->first();
         if ($order) {
+            if ($order->customer_id && !$shoppingCart->customer_id) {
+                $shoppingCart->updateQuietly([
+                    'customer_id' => $order->customer_id
+                ]);
+            }
             return $order;
         }
 
@@ -129,6 +134,12 @@ class Order extends Model
             'shipping_including_vat' => $shoppingCart->getShippingAmountIncludingVat(),
             'shipping_vat_amount' => $shoppingCart->getShippingVatAmount(),
         ]);
+
+        if ($order->customer_id && !$shoppingCart->customer_id) {
+            $shoppingCart->updateQuietly([
+                'customer_id' => $order->customer_id
+            ]);
+        }
 
         /**
          * Add the shopping cart items to the order
