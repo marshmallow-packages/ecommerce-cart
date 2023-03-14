@@ -33,6 +33,11 @@ class Order extends Model
          */
         $order = self::where('shopping_cart_id', $shoppingCart->id)->first();
         if ($order) {
+            if ($order->customer_id && !$shoppingCart->customer_id) {
+                $shoppingCart->update([
+                    'customer_id' => $order->customer_id
+                ]);
+            }
             return $order;
         }
 
@@ -130,9 +135,9 @@ class Order extends Model
             'shipping_vat_amount' => $shoppingCart->getShippingVatAmount(),
         ]);
 
-        if ($customer && !$shoppingCart->customer_id) {
-            $shoppingCart->updateQuietly([
-                'customer_id' => $customer->id
+        if ($order->customer_id && !$shoppingCart->customer_id) {
+            $shoppingCart->update([
+                'customer_id' => $order->customer_id
             ]);
         }
 
