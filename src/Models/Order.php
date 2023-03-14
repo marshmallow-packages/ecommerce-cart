@@ -130,6 +130,12 @@ class Order extends Model
             'shipping_vat_amount' => $shoppingCart->getShippingVatAmount(),
         ]);
 
+        if ($customer && !$shoppingCart->customer_id) {
+            $shoppingCart->updateQuietly([
+                'customer_id' => $customer->id
+            ]);
+        }
+
         /**
          * Add the shopping cart items to the order
          */
