@@ -164,6 +164,26 @@ class ShoppingCart extends Model
         return null;
     }
 
+    public function getCustomerId(): ?string
+    {
+        $customer = $this->getCustomer();
+        if ($customer && $customer_id = $customer->id) {
+            return $customer_id;
+        }
+
+        return null;
+    }
+
+    public function getCustomerPayableExternalId(): ?string
+    {
+        $customer = $this->getCustomer();
+        if ($customer && $external_id = $customer->payable_external_id) {
+            return $external_id;
+        }
+
+        return null;
+    }
+
     public function hasExcludedShipping(): bool
     {
         return false;
