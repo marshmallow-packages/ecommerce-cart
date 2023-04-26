@@ -121,6 +121,10 @@ class Discount extends Model
 
     public function getEligibleForEmailsAttribute($email_addresses)
     {
+        if (!$email_addresses) {
+            return null;
+        }
+
         $email_addresses = is_array($email_addresses) ? $email_addresses : json_decode($email_addresses, true);
         if (!is_array($email_addresses)) {
             return null;
@@ -136,6 +140,10 @@ class Discount extends Model
 
     public function setEligibleForEmailsAttribute($email_addresses)
     {
+        if (!$email_addresses) {
+            return;
+        }
+
         if (!is_array($email_addresses)) {
             $email_addresses = collect(explode("\n", $email_addresses))->map(function ($email_address) {
                 return (string) Str::of($email_address)->replace("\r", '')->trim();
