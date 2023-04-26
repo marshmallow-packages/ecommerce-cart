@@ -189,6 +189,10 @@ class Discount extends Resource
 
                     NovaDependencyContainer::make([
                         Textarea::make(__('Emails'), 'eligible_for_emails')->help(__('Please add one emailaddress per row.'))->resolveUsing(function ($value) {
+                            if (!$value) {
+                                return null;
+                            }
+
                             $value = is_array($value) ? $value : json_decode($value, true);
                             if ($value) {
                                 return join("\n", $value);
