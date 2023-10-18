@@ -2,22 +2,11 @@
 
 namespace Marshmallow\Ecommerce\Cart\Http\Livewire;
 
-use Livewire\Component;
-
-class ShoppingCart extends Component
+class ShoppingCart
 {
-
-    protected $listeners = ['productAdded' => 'updateShoppingCart'];
-
-    public $count = 0;
-
-    public function updateShoppingCart()
-    {
-        $this->count++;
-    }
-
-    public function render()
-    {
-        return view('ecommerce::livewire.shopping-cart');
-    }
+    /**
+     * Deprecate this class.
+     * Because it was added to the config files we keep this class so the published
+     * version of the config file will not break.
+     */
 }
