@@ -30,7 +30,6 @@
         "marshmallow/addressable": "^v1.6.1",
         "marshmallow/nova-tabs": "^2.0.3",
         "sloveniangooner/searchable-select": "^1.3.2",
-        "livewire/livewire": "^v2.10.5",
         "laravel/nova": "^4.0"
     },
     "repositories": [
