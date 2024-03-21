@@ -14,6 +14,7 @@ use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 
 class ShoppingCart extends Model
@@ -333,9 +334,13 @@ class ShoppingCart extends Model
 
     public static function completelyNew(): ShoppingCart
     {
-        $cart = self::create();
-        session()->put(self::SESSION_KEY, $cart->id);
-        return $cart;
+        try {
+            $cart = self::create();
+            session()->put(self::SESSION_KEY, $cart->id);
+            return $cart;
+        } catch (UniqueConstraintViolationException $e) {
+            return self::completelyNew();
+        }
     }
 
     public static function newWithSameProspect(ShoppingCart $cart): ShoppingCart
