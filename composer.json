@@ -29,7 +29,7 @@
         "marshmallow/dataset-country": "^v1.2.2",
         "marshmallow/addressable": "^v1.6.1",
         "marshmallow/nova-tabs": "^2.0.3",
-        "laravel/nova": "^4.0"
+        "laravel/nova": "^4.0|^5.0"
     },
     "repositories": [
         {
