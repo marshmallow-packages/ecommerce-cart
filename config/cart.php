@@ -56,32 +56,11 @@ return [
     ],
 
     /**
-     * Jobs
-     */
-    'jobs' => [
-        'process_inquiry_request' => \Marshmallow\Ecommerce\Cart\Jobs\ProcessInquiryRequest::class,
-    ],
-
-    /**
-     * View classes
-     */
-    'view' => [
-        'components' => [
-            'cart' => \Marshmallow\Ecommerce\Cart\View\Components\Cart::class,
-            'ecommerce_main_menu_component' => \Marshmallow\Ecommerce\Cart\View\Components\EcommerceMainMenuComponent::class,
-        ],
-    ],
-
-    /**
      * HTTP classes
      */
     'http' => [
         'middleware' => [
             'cart' => \Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware::class,
-        ],
-        'livewire' => [
-            'shopping_cart' => \Marshmallow\Ecommerce\Cart\Http\Livewire\ShoppingCart::class,
-            'product_to_cart' => \Marshmallow\Ecommerce\Cart\Http\Livewire\ProductToCart::class,
         ],
     ],
 
