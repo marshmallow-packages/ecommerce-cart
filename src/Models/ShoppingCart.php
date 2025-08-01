@@ -15,6 +15,7 @@ use Marshmallow\Ecommerce\Cart\Traits\Totals;
 use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Payable\Traits\PayableWithItems;
 use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 
 class ShoppingCart extends Model
@@ -53,6 +54,7 @@ class ShoppingCart extends Model
             if (!$cart->prospect_id) {
                 $prospect = config('cart.models.prospect')::create([]);
                 $cart->prospect_id = $prospect->id;
+                $cart->customer_id = $prospect->getCustomer()?->id;
             }
         });
     }
@@ -166,6 +168,7 @@ class ShoppingCart extends Model
         return null;
     }
 
+
     public function getCustomerPhonenumber(): ?string
     {
         $customer = $this->getCustomer();
@@ -174,6 +177,38 @@ class ShoppingCart extends Model
         }
 
         return null;
+    }
+
+    public function getCustomerId(): ?string
+    {
+        $customer = $this->getCustomer();
+        if ($customer && $customer_id = $customer->id) {
+            return $customer_id;
+        }
+
+        return null;
+    }
+
+    public function getCustomerPayableExternalId(): ?string
+    {
+        $customer = $this->getCustomer();
+        if ($customer && $external_id = $customer->payable_external_id) {
+            return $external_id;
+        }
+
+        return null;
+    }
+
+
+    public function addCustomerIfExists(): void
+    {
+        if ($this->customer_id) {
+            return;
+        }
+
+        $prospect = $this->prospect;
+        $this->customer_id = $prospect->getCustomer()?->id;
+        $this->saveQuietly();
     }
 
     public function hasExcludedShipping(): bool
@@ -311,9 +346,13 @@ class ShoppingCart extends Model
 
     public static function completelyNew(): ShoppingCart
     {
-        $cart = self::create();
-        session()->put(self::SESSION_KEY, $cart->id);
-        return $cart;
+        try {
+            $cart = self::create();
+            session()->put(self::SESSION_KEY, $cart->id);
+            return $cart;
+        } catch (UniqueConstraintViolationException $e) {
+            return self::completelyNew();
+        }
     }
 
     public static function newWithSameProspect(ShoppingCart $cart): ShoppingCart
