@@ -2,7 +2,6 @@
 
 namespace Marshmallow\Ecommerce\Cart;
 
-use Livewire\Livewire;
 use Illuminate\Support\Facades\Blade;
 use Marshmallow\Ecommerce\Cart\EventServiceProvider;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
@@ -41,7 +40,6 @@ class ServiceProvider extends BaseServiceProvider
 
         $this->loadResources();
         $this->registerEcommerceBladeComponents();
-        $this->registerEcommerceLivewireComponents();
         $this->registerPublishebles();
         $this->loadCommands();
     }
@@ -52,11 +50,6 @@ class ServiceProvider extends BaseServiceProvider
         Blade::component('ecommerce-main-menu', config('cart.view.components.ecommerce_main_menu_component'));
     }
 
-    protected function registerEcommerceLivewireComponents()
-    {
-        Livewire::component('shopping-cart', config('cart.http.livewire.shopping_cart'));
-        Livewire::component('product-to-cart', config('cart.http.livewire.product_to_cart'));
-    }
 
     protected function loadCommands()
     {
