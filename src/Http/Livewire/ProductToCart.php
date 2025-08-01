@@ -2,17 +2,9 @@
 
 namespace Marshmallow\Ecommerce\Cart\Http\Livewire;
 
-use Livewire\Component;
-
-class ProductToCart extends Component
+class ProductToCart
 {
-    public function increment()
-    {
-        $this->emit('productAdded');
-    }
-
-    public function render()
-    {
-        return view('ecommerce::livewire.product-to-cart');
-    }
+    /**
+     * @deprecated This class is deprecated and will be removed in a future version.
+     */
 }

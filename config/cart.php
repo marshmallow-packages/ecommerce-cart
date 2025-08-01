@@ -76,10 +76,6 @@ return [
         'middleware' => [
             'cart' => \Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware::class,
         ],
-        'livewire' => [
-            'shopping_cart' => \Marshmallow\Ecommerce\Cart\Http\Livewire\ShoppingCart::class,
-            'product_to_cart' => \Marshmallow\Ecommerce\Cart\Http\Livewire\ProductToCart::class,
-        ],
     ],
 
     /**
