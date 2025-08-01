@@ -6,7 +6,7 @@ use Marshmallow\Priceable\Facades\Price;
 
 trait PriceFormatter
 {
-    public function getFormatted(string $method_column_or_value = null): string
+    public function getFormatted(?string $method_column_or_value = null): string
     {
         $method_column_or_value = $method_column_or_value ?? 0;
 
