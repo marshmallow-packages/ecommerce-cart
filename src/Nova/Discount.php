@@ -5,29 +5,21 @@ namespace Marshmallow\Ecommerce\Cart\Nova;
 use App\Nova\Resource;
 use Eminiarts\Tabs\Tabs;
 use Laravel\Nova\Fields\ID;
-use Illuminate\Http\Request;
-use Laravel\Nova\Http\Requests\NovaRequest;
 use Laravel\Nova\Fields\Number;
 use Laravel\Nova\Fields\Select;
 use Laravel\Nova\Fields\Boolean;
 use Laravel\Nova\Fields\Heading;
 use Laravel\Nova\Fields\Currency;
 use Laravel\Nova\Fields\DateTime;
+use Laravel\Nova\Fields\FormData;
 use Laravel\Nova\Fields\Textarea;
-use Marshmallow\Nova\Flexible\Flexible;
-use Marshmallow\Product\Models\Product;
-use Marshmallow\Product\Models\ProductCategory;
+use Laravel\Nova\Fields\MultiSelect;
+use Laravel\Nova\Http\Requests\NovaRequest;
 use Marshmallow\NovaGenerateString\GenerateString;
-use Sloveniangooner\SearchableSelect\SearchableSelect;
-use Epartment\NovaDependencyContainer\NovaDependencyContainer;
-use Marshmallow\Ecommerce\Cart\Helpers\DiscountProductSelector;
-use Marshmallow\Ecommerce\Cart\Helpers\DiscountCustomerSelector;
 use Marshmallow\Ecommerce\Cart\Models\Discount as ModelsDiscount;
-use Marshmallow\Ecommerce\Cart\Helpers\DiscountProductCategorySelector;
 
 class Discount extends Resource
 {
-
     public static function group()
     {
         return __('Discount');
@@ -91,21 +83,32 @@ class Discount extends Resource
                         ->rules('required')
                         ->displayUsingLabels(),
 
-                    NovaDependencyContainer::make([
-                        Heading::make(__('Amount')),
-                        Currency::make(__('Fixed amount'), 'fixed_amount')->required()
-                            ->rules('required')
-                            ->resolveUsing(function ($value) {
-                                if ($value) {
-                                    return $value / 100;
+                    Heading::make(__('Amount')),
+                    Currency::make(__('Fixed amount'), 'fixed_amount')
+                        ->hide()
+                        ->resolveUsing(function ($value) {
+                            if ($value) {
+                                return $value / 100;
+                            }
+                        })->dependsOn(
+                            ['discount_type'],
+                            function (Currency $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->discount_type === ModelsDiscount::TYPE_FIXED_AMOUNT) {
+                                    $field->show()->rules('required')->rules(['required']);
                                 }
-                            }),
-                    ])->dependsOn('discount_type', 'fixed_amount'),
-                    NovaDependencyContainer::make([
-                        Heading::make(__('Amount')),
-                        Number::make(__('Percentage amount'), 'percentage_amount')->required()
-                            ->rules('required'),
-                    ])->dependsOn('discount_type', 'percentage'),
+                            }
+                        ),
+
+                    Number::make(__('Percentage amount'), 'percentage_amount')
+                        ->hide()
+                        ->dependsOn(
+                            ['discount_type'],
+                            function (Number $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->discount_type === ModelsDiscount::TYPE_PERCENTAGE) {
+                                    $field->show()->rules('required')->rules(['required']);
+                                }
+                            }
+                        ),
 
                     Boolean::make(__('Active'), 'is_active')
                         ->withMeta($this->is_active !== null ? [] : ['value' => true])
@@ -121,19 +124,31 @@ class Discount extends Resource
                         ->required()
                         ->rules('required'),
 
-                    NovaDependencyContainer::make([
-                        SearchableSelect::make(__('Categories'), 'applies_to_product_categories')
-                            ->resource(config('cart.nova.resources.product_category'))
-                            ->multiple()
-                            ->displayUsingLabels()
-                    ])->dependsOn('applies_to', 'specific_categories'),
+                    MultiSelect::make(__('Categories'), 'applies_to_product_categories')->options(
+                        config('cart.models.product_category')::pluck('name', 'id'),
+                    )
+                        ->hide()
+                        ->dependsOn(
+                            ['applies_to'],
+                            function (MultiSelect $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->applies_to === ModelsDiscount::APPLIES_TO_CATEGORIES) {
+                                    $field->show()->required()->rules(['required']);
+                                }
+                            }
+                        ),
 
-                    NovaDependencyContainer::make([
-                        SearchableSelect::make(__('Products'), 'applies_to_products')
-                            ->resource(config('cart.nova.resources.product'))
-                            ->multiple()
-                            ->displayUsingLabels()
-                    ])->dependsOn('applies_to', 'specific_products'),
+                    MultiSelect::make(__('Products'), 'applies_to_products')->options(
+                        config('cart.models.product')::pluck('name', 'id'),
+                    )
+                        ->hide()
+                        ->dependsOn(
+                            ['applies_to'],
+                            function (MultiSelect $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->applies_to === ModelsDiscount::APPLIES_TO_PRODUCTS) {
+                                    $field->show()->required()->rules(['required']);
+                                }
+                            }
+                        ),
                 ],
                 __('Requirements') => [
                     Select::make(__('Minimum requirements'), 'prerequisite_type')->options([
@@ -146,26 +161,33 @@ class Discount extends Resource
                         ->required()
                         ->rules('required'),
 
-                    NovaDependencyContainer::make([
-                        Currency::make(__('Minimum purchase amount'), 'prerequisite_purchase_amount')
-                            ->hideFromIndex()
-                            ->required()
-                            ->rules('required')
-                            ->resolveUsing(function ($value) {
-                                if ($value) {
-                                    return $value / 100;
+                    Currency::make(__('Minimum purchase amount'), 'prerequisite_purchase_amount')
+                        ->hideFromIndex()
+                        ->hide()
+                        ->resolveUsing(function ($value) {
+                            if ($value) {
+                                return $value / 100;
+                            }
+                        })->dependsOn(
+                            ['prerequisite_type'],
+                            function (Currency $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->prerequisite_type === ModelsDiscount::PREREQUISITE_PURCHASE_AMOUNT) {
+                                    $field->show()->required()->rules(['required']);
                                 }
-                            }),
-                    ])->dependsOn('prerequisite_type', 'prerequisite_purchase_amount'),
+                            }
+                        ),
 
-                    NovaDependencyContainer::make([
-                        Number::make(__('Minimum quantity of items'), 'prerequisite_quantity')
-                            ->hideFromIndex()
-                            ->required()
-                            ->rules('required'),
-                    ])->dependsOn('prerequisite_type', 'prerequisite_quantity'),
-
-
+                    Number::make(__('Minimum quantity of items'), 'prerequisite_quantity')
+                        ->hideFromIndex()
+                        ->hide()
+                        ->dependsOn(
+                            ['prerequisite_type'],
+                            function (Number $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->prerequisite_type === ModelsDiscount::PREREQUISITE_QUANTITY) {
+                                    $field->show()->required()->rules(['required']);
+                                }
+                            }
+                        ),
                 ],
                 __('Eligble for') => [
                     Select::make(__('Customer eligibility'), 'eligible_for')->options([
@@ -177,23 +199,27 @@ class Discount extends Resource
                         ->displayUsingLabels()
                         ->required()->rules('required'),
 
-                    NovaDependencyContainer::make([
-                        SearchableSelect::make(__('Customers'), 'eligible_for_customers')
-                            ->resource(config('cart.nova.resources.customer'))
-                            ->multiple()
-                            ->displayUsingLabels()
-                            ->required()
-                            ->rules('required')
-                    ])->dependsOn('eligible_for', 'eligible_for_customers'),
-
-                    NovaDependencyContainer::make([
-                        Textarea::make(__('Emails'), 'eligible_for_emails')->help(__('Please add one emailaddress per row.'))->resolveUsing(function ($value) {
-                            $value = is_array($value) ? $value : json_decode($value, true);
-                            if ($value) {
-                                return join("\n", $value);
+                    Textarea::make(__('Customer IDs'), 'eligible_for_customers')->help(__('Please add one customer id per row.'))
+                        ->hide()
+                        ->dependsOn(
+                            ['eligible_for'],
+                            function (Textarea $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->eligible_for === ModelsDiscount::ELIGIBLE_FOR_CUSTOMERS) {
+                                    $field->show()->required()->rules(['required']);
+                                }
                             }
-                        })->required()->rules('required'),
-                    ])->dependsOn('eligible_for', 'eligible_for_emails'),
+                        ),
+
+                    Textarea::make(__('Emails'), 'eligible_for_emails')->help(__('Please add one emailaddress per row.'))
+                        ->hide()
+                        ->dependsOn(
+                            ['eligible_for'],
+                            function (Textarea $field, NovaRequest $request, FormData $formData) {
+                                if ($formData->eligible_for === ModelsDiscount::ELIGIBLE_FOR_EMAILS) {
+                                    $field->show()->required()->rules(['required']);
+                                }
+                            }
+                        ),
                 ],
 
                 __('Limits') => [

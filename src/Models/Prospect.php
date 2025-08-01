@@ -27,7 +27,7 @@ class Prospect extends Model
         if ($customer = config('cart.models.customer')::where('prospect_id', $this->id)->first()) {
             return $customer;
         }
-        $customer = config('cart.models.customer')::where('email', $this->email)->first();
+        $customer = config('cart.models.customer')::where('email', $this->email)->whereNotNull('email')->first();
         if (!$customer) {
             $customer = config('cart.models.customer')::create([
                 'first_name' => $this->first_name,
@@ -42,6 +42,16 @@ class Prospect extends Model
 
             event(new CustomerCreated($customer));
         }
+
+        return $customer;
+    }
+
+    public function getCustomer()
+    {
+        if ($customer = config('cart.models.customer')::where('prospect_id', $this->id)->first()) {
+            return $customer;
+        }
+        $customer = config('cart.models.customer')::where('email', $this->email)->whereNotNull('email')->first();
 
         return $customer;
     }
