@@ -22,7 +22,6 @@
     "require": {
         "php": "^8.3",
         "marshmallow/nova-flexible": "^v2.0.0",
-        "marshmallow/nova-field-string-generator": "^v2.0.0",
         "marshmallow/priceable": "^v3.0.0",
         "marshmallow/products": "^v3.0.0",
         "marshmallow/payable": "^v2.0.0",
