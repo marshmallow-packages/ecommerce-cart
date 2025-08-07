@@ -68,7 +68,6 @@ class ServiceProvider extends BaseServiceProvider
     {
         $this->loadRoutesFrom(__DIR__ . '/../routes.php');
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
-        $this->loadFactoriesFrom(__DIR__ . '/../database/factories');
         $this->loadTranslationsFrom(__DIR__ . '/../resources/lang', 'ecommerce');
     }
 }
