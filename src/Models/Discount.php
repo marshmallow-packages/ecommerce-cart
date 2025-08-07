@@ -250,6 +250,7 @@ class Discount extends Model
             self::TYPE_FIXED_AMOUNT => $this->calculateFixedAmountDiscount($cart),
             self::TYPE_PERCENTAGE => $this->calculatePercentageDiscount($cart),
             self::TYPE_FREE_SHIPPING => $this->calculateFreeShippingDiscount($cart),
+            default => 0,
         };
 
         $cart_total = $cart->getTotalAmountWithoutShippingAndDiscount();
