@@ -3,7 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Nova;
 
 use App\Nova\Resource;
-use Eminiarts\Tabs\Tabs;
+use Laravel\Nova\Tabs\Tab;
 use Laravel\Nova\Fields\ID;
 use Illuminate\Http\Request;
 use Laravel\Nova\Http\Requests\NovaRequest;
@@ -61,18 +61,17 @@ class OrderItem extends Resource
     public function fields(NovaRequest $request)
     {
         return [
-            new Tabs('Tabs', [
-                'Item'    => [
-                    ID::make(),
-                    BelongsTo::make(__('Order'), 'order', config('cart.nova.resources.order'))->searchable()->nullable(),
-                    BelongsTo::make(__('Product'), 'product', config('cart.nova.resources.product'))->searchable()->nullable(),
-                    Text::make(__('Description'), 'description'),
-                    Number::make(__('Quantity'), 'quantity'),
-                    Text::make(__('Type'), 'type')->hideFromIndex(),
-                    DateTime::make(__('Created at'), 'created_at')->hideFromIndex(),
-                ],
+            Tab::make(__('Item'), [
+                ID::make(),
+                BelongsTo::make(__('Order'), 'order', config('cart.nova.resources.order'))->searchable()->nullable(),
+                BelongsTo::make(__('Product'), 'product', config('cart.nova.resources.product'))->searchable()->nullable(),
+                Text::make(__('Description'), 'description'),
+                Number::make(__('Quantity'), 'quantity'),
+                Text::make(__('Type'), 'type')->hideFromIndex(),
+                DateTime::make(__('Created at'), 'created_at')->hideFromIndex(),
+            ]),
 
-                'Prices' => [
+            Tab::make(__('Prices'), [
                     /**
                      * Default prices
                      */
@@ -108,7 +107,6 @@ class OrderItem extends Resource
                     Text::make(__('VAT'), 'discount_vat_amount')->resolveUsing(function ($value, $resource) {
                         return $resource->getFormatted($value);
                     })->hideFromIndex(),
-                ],
             ]),
         ];
     }

@@ -4,7 +4,7 @@ namespace Marshmallow\Ecommerce\Cart\Nova;
 
 use App\Nova\Resource;
 use App\Nova\OrderItem;
-use Eminiarts\Tabs\Tabs;
+use Laravel\Nova\Tabs\Tab;
 use Laravel\Nova\Fields\ID;
 use Illuminate\Http\Request;
 use Laravel\Nova\Http\Requests\NovaRequest;
@@ -56,32 +56,32 @@ class Order extends Resource
     public function fields(NovaRequest $request)
     {
         return [
-            new Tabs('Tabs', [
-                'Order'    => [
-                    ID::make(),
-                    BelongsTo::make(__('Customer'), 'customer', config('cart.nova.resources.customer'))->searchable()->nullable(),
-                    BelongsTo::make(__('User'), 'user', config('cart.nova.resources.user'))->searchable()->nullable(),
-                    DateTime::make(__('Created At'), 'created_at'),
-                    Text::make(__('Invoice address'))->resolveUsing(function ($value, $resource) {
-                        if ($resource->invoiceAddress()) {
-                            return $resource->invoiceAddress()->getAsString();
-                        }
-                    })->hideFromIndex(),
-                    Textarea::make(__('Note'), 'note'),
-                ],
-                'Shipping' => [
-                    Text::make(__('Shipping address'))->resolveUsing(function ($value, $resource) {
-                        if ($resource->shippingAddress()) {
-                            return $resource->shippingAddress()->getAsString();
-                        }
-                    })->hideFromIndex(),
-                    BelongsTo::make(__('Type'), 'shippingMethod', config('cart.nova.resources.shipping_method'))->searchable()->nullable(),
-                    Text::make(__('Track and Trace'), 'track_and_trace'),
-                    Text::make(__('Status'), 'shipping_status'),
-                    DateTime::make(__('Shipped at'), 'shipped_at'),
-                ],
+            Tab::make(__('Order'), [
+                ID::make(),
+                BelongsTo::make(__('Customer'), 'customer', config('cart.nova.resources.customer'))->searchable()->nullable(),
+                BelongsTo::make(__('User'), 'user', config('cart.nova.resources.user'))->searchable()->nullable(),
+                DateTime::make(__('Created At'), 'created_at'),
+                Text::make(__('Invoice address'))->resolveUsing(function ($value, $resource) {
+                    if ($resource->invoiceAddress()) {
+                        return $resource->invoiceAddress()->getAsString();
+                    }
+                })->hideFromIndex(),
+                Textarea::make(__('Note'), 'note'),
+            ]),
+            
+            Tab::make(__('Shipping'), [
+                Text::make(__('Shipping address'))->resolveUsing(function ($value, $resource) {
+                    if ($resource->shippingAddress()) {
+                        return $resource->shippingAddress()->getAsString();
+                    }
+                })->hideFromIndex(),
+                BelongsTo::make(__('Type'), 'shippingMethod', config('cart.nova.resources.shipping_method'))->searchable()->nullable(),
+                Text::make(__('Track and Trace'), 'track_and_trace'),
+                Text::make(__('Status'), 'shipping_status'),
+                DateTime::make(__('Shipped at'), 'shipped_at'),
+            ]),
 
-                'Prices' => [
+            Tab::make(__('Prices'), [
                     /**
                      * Default prices
                      */
@@ -132,7 +132,6 @@ class Order extends Resource
                     Text::make(__('VAT'), 'shipping_vat_amount')->resolveUsing(function ($value, $resource) {
                         return $resource->getFormatted($value);
                     })->hideFromIndex(),
-                ],
             ]),
 
             HasMany::make(__('Items'), 'items', config('cart.nova.resources.order_item')),
