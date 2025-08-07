@@ -41,11 +41,4 @@ class Cart
 
         return config('cart.models.shopping_cart')::completelyNew();
     }
-
-    public function layouts()
-    {
-        return [
-            'ecommerce-product-overview' => \Marshmallow\Ecommerce\Cart\Flexible\Layouts\EcommerceProductOverviewLayout::class,
-        ];
-    }
 }

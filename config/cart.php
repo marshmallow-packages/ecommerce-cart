@@ -56,23 +56,6 @@ return [
     ],
 
     /**
-     * Jobs
-     */
-    'jobs' => [
-        'process_inquiry_request' => \Marshmallow\Ecommerce\Cart\Jobs\ProcessInquiryRequest::class,
-    ],
-
-    /**
-     * View classes
-     */
-    'view' => [
-        'components' => [
-            'cart' => \Marshmallow\Ecommerce\Cart\View\Components\Cart::class,
-            'ecommerce_main_menu_component' => \Marshmallow\Ecommerce\Cart\View\Components\EcommerceMainMenuComponent::class,
-        ],
-    ],
-
-    /**
      * HTTP classes
      */
     'http' => [
