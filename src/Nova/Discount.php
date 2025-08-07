@@ -3,7 +3,7 @@
 namespace Marshmallow\Ecommerce\Cart\Nova;
 
 use App\Nova\Resource;
-use Eminiarts\Tabs\Tabs;
+use Laravel\Nova\Tabs\Tab;
 use Laravel\Nova\Fields\ID;
 use Laravel\Nova\Fields\Number;
 use Laravel\Nova\Fields\Select;
@@ -61,9 +61,7 @@ class Discount extends Resource
     public function fields(NovaRequest $request)
     {
         return [
-
-            (new Tabs('Discount', [
-                'Setup'    => [
+            Tab::make(__('Setup'), [
                     ID::make(),
                     Heading::make(__('Voucher code')),
                     GenerateString::make(__('Code'), 'discount_code')
@@ -112,8 +110,9 @@ class Discount extends Resource
 
                     Boolean::make(__('Active'), 'is_active')
                         ->withMeta($this->is_active !== null ? [] : ['value' => true])
-                ],
-                __('Applies to') => [
+            ]),
+
+            Tab::make(__('Applies to'), [
                     Select::make(__('Applies to'), 'applies_to')->options([
                         ModelsDiscount::APPLIES_TO_ALL => __('All products'),
                         ModelsDiscount::APPLIES_TO_CATEGORIES => __('Specific categories'),
@@ -149,8 +148,9 @@ class Discount extends Resource
                                 }
                             }
                         ),
-                ],
-                __('Requirements') => [
+            ]),
+
+            Tab::make(__('Requirements'), [
                     Select::make(__('Minimum requirements'), 'prerequisite_type')->options([
                         ModelsDiscount::PREREQUISITE_NONE => __('None'),
                         ModelsDiscount::PREREQUISITE_PURCHASE_AMOUNT => __('Minimum purchase amount (€)'),
@@ -188,8 +188,9 @@ class Discount extends Resource
                                 }
                             }
                         ),
-                ],
-                __('Eligble for') => [
+            ]),
+
+            Tab::make(__('Eligble for'), [
                     Select::make(__('Customer eligibility'), 'eligible_for')->options([
                         ModelsDiscount::ELIGIBLE_FOR_ALL => __('All customers'),
                         ModelsDiscount::ELIGIBLE_FOR_CUSTOMERS => __('Specific customers'),
@@ -220,17 +221,16 @@ class Discount extends Resource
                                 }
                             }
                         ),
-                ],
+            ]),
 
-                __('Limits') => [
+            Tab::make(__('Limits'), [
                     Number::make(__('Total usage limit'), 'total_usage_limit'),
                     Boolean::make(__('Once per customer'), 'is_once_per_customer'),
 
                     Heading::make(__('Active dates')),
                     DateTime::make(__('Starts at'), 'starts_at')->nullable(),
-                    DateTime::make(__('Starts at'), 'ends_at')->nullable(),
-                ],
-            ]))->withToolbar(),
+                    DateTime::make(__('Ends at'), 'ends_at')->nullable(),
+            ]),
         ];
     }
 
