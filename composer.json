@@ -24,7 +24,7 @@
         "marshmallow/nova-flexible": "^v5.2.1",
         "marshmallow/priceable": "^v3.0.0",
         "marshmallow/products": "^v5.0.0",
-        "marshmallow/payable": "^v2.0.0",
+        "marshmallow/payable": "^v2.0.0 || ^3.0.0",
         "marshmallow/dataset-country": "^v1.2.2",
         "marshmallow/addressable": "^v1.6.1",
         "laravel/nova": "^5.0"
