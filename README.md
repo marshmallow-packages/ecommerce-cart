@@ -2,9 +2,10 @@
 
 # Ecommerce Shopping Cart
 
-[![Version](https://img.shields.io/packagist/v/marshmallow/cart)](https://github.com/marshmallow-packages/ecommerce-cart)
-[![Issues](https://img.shields.io/github/issues/marshmallow-packages/ecommerce-cart)](https://github.com/marshmallow-packages/ecommerce-cart)
-[![Licence](https://img.shields.io/github/license/marshmallow-packages/ecommerce-cart)](https://github.com/marshmallow-packages/ecommerce-cart)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/marshmallow/cart.svg?style=flat-square)](https://packagist.org/packages/marshmallow/cart)
+[![Tests](https://img.shields.io/github/actions/workflow/status/marshmallow-packages/ecommerce-cart/php-syntax-checker.yml?branch=main&label=tests&style=flat-square)](https://github.com/marshmallow-packages/ecommerce-cart/actions/workflows/php-syntax-checker.yml)
+[![Total Downloads](https://img.shields.io/packagist/dt/marshmallow/cart.svg?style=flat-square)](https://packagist.org/packages/marshmallow/cart)
+[![Licence](https://img.shields.io/github/license/marshmallow-packages/ecommerce-cart?style=flat-square)](https://github.com/marshmallow-packages/ecommerce-cart/blob/main/LICENSE)
 
 This package contains all the logic you need to make use of a shopping cart in your Laravel application. It also contains all the Nova resources you need to manage your store. We use this package at Marshmallow for a lot of customers and add new functionalities when ever we need them. If you wish to use this, please do so and let us know if you have any issues.
 
@@ -143,7 +144,7 @@ use Marshmallow\Ecommerce\Cart\Facades\Cart;
 Cart::get()->deleteDiscount();
 ```
 
-# Cart methods
+# Discount cart methods
 
 With the introduction of the discount methods you might need to update the methods that are used in your shopping cart to display cart totals. Please see the new methods below.
 
@@ -209,24 +210,15 @@ $item->getTotalVatAmount();
 $item->getFormatted('getTotalAmount');
 ```
 
-## Changelog
-
-Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
-
-## Testing
-
-```bash
-composer test
-```
-
 ## Security
 
 If you discover any security related issues, please email stef@marshmallow.dev instead of using the issue tracker.
 
 ## Credits
 
--   [All Contributors](../../contributors)
+-   [Stef](https://marshmallow.dev)
+-   [All Contributors](https://github.com/marshmallow-packages/ecommerce-cart/contributors)
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+The MIT License (MIT). Please see the [License File](LICENSE) for more information.
