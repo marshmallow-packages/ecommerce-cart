@@ -25,7 +25,7 @@
         "marshmallow/nova-field-string-generator": "^v2.0.0",
         "marshmallow/priceable": "^v3.0.0",
         "marshmallow/products": "^v3.0.0",
-        "marshmallow/payable": "^v2.0.0",
+        "marshmallow/payable": "^v2.0.0 || ^4.0",
         "marshmallow/dataset-country": "^v1.2.2",
         "marshmallow/addressable": "^v1.6.1",
         "marshmallow/nova-tabs": "^2.0.3",
