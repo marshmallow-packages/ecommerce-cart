@@ -1,224 +1,228 @@
 ![alt text](https://marshmallow.dev/cdn/media/logo-red-237x46.png "marshmallow.")
 
-# Ecommerce Shopping Cart
+# Ecommerce Cart
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/marshmallow/cart.svg?style=flat-square)](https://packagist.org/packages/marshmallow/cart)
-[![Tests](https://img.shields.io/github/actions/workflow/status/marshmallow-packages/ecommerce-cart/php-syntax-checker.yml?branch=main&label=tests&style=flat-square)](https://github.com/marshmallow-packages/ecommerce-cart/actions/workflows/php-syntax-checker.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/marshmallow-packages/ecommerce-cart/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/marshmallow-packages/ecommerce-cart/actions/workflows/tests.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/marshmallow/cart.svg?style=flat-square)](https://packagist.org/packages/marshmallow/cart)
-[![Licence](https://img.shields.io/github/license/marshmallow-packages/ecommerce-cart?style=flat-square)](https://github.com/marshmallow-packages/ecommerce-cart/blob/main/LICENSE)
 
-This package contains all the logic you need to make use of a shopping cart in your Laravel application. It also contains all the Nova resources you need to manage your store. We use this package at Marshmallow for a lot of customers and add new functionalities when ever we need them. If you wish to use this, please do so and let us know if you have any issues.
+Framework-agnostic e-commerce cart, order and discount engine for Laravel. This major drops every hard dependency on an admin panel — there is no Nova (or Filament) requirement in the core — so the same cart logic powers a storefront regardless of how the shop is administered.
+
+- A session-backed **shopping cart** with line combining, quantity handling and per-line price snapshots.
+- An immutable **`Price`** value object: integer cents, VAT-inclusive canonical, with `net + vat === gross` guaranteed.
+- **Discounts** (fixed amount, percentage, free shipping) with prerequisites, eligibility rules and usage limits.
+- **Shipping methods** the customer picks, priced with a free-over-threshold, plus **fee lines** for payment surcharges.
+- **Orders** created from a paid cart as an immutable financial record, idempotent on the cart id.
+- A full **event stream**, **stock hooks**, **cart merge on login** and **abandoned-cart housekeeping**.
+
+Requires PHP `^8.3` and Laravel `^12.0 || ^13.0`.
 
 ## Installation
 
-### Composer
+Install the package via Composer:
 
-You can install this package via the following composer command.
-
-```
+```bash
 composer require marshmallow/cart
 ```
 
-### Migrate
-
-You need to run the migration from this package to create all the tables we need to do some ecommerce magic.
+Publish the config file:
 
 ```bash
+php artisan vendor:publish --tag="cart-config"
+```
+
+Publish and run the migrations:
+
+```bash
+php artisan vendor:publish --tag="cart-migrations"
 php artisan migrate
 ```
 
-### Middleware
+Coming from a Nova-based release? Publish the guarded upgrade migration instead and read [UPGRADE.md](UPGRADE.md):
 
-Please add the following middle ware to your web group to make sure the cart is available on every route. If you wish to include this middleware to a select set of route you can do so.
+```bash
+php artisan vendor:publish --tag="cart-upgrade-migrations"
+php artisan migrate
+```
+
+Register the middleware (aliased as `cart`) on your storefront routes so every request carries the current cart:
 
 ```php
-protected $middlewareGroups = [
-    'web' => [
-        // ...
-        \Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware::class,
-    ],
-];
+Route::middleware('cart')->group(function () {
+    // storefront routes
+});
 ```
 
-### Nova
+## Configuration
 
-Run the commands below to publish all the Nova resources that you need to manage all the ecommerce stuff.
-
-```bash
-php artisan marshmallow:resource Product Product
-php artisan marshmallow:resource ProductCategory Product
-php artisan marshmallow:resource Supplier Product
-php artisan marshmallow:resource Price Priceable
-php artisan marshmallow:resource VatRate Priceable
-php artisan marshmallow:resource Currency Priceable
-php artisan marshmallow:resource Prospect Ecommerce\\Cart
-php artisan marshmallow:resource ShoppingCart Ecommerce\\Cart
-php artisan marshmallow:resource Customer Ecommerce\\Cart
-php artisan marshmallow:resource ShippingMethod Ecommerce\\Cart
-php artisan marshmallow:resource ShippingMethodCondition Ecommerce\\Cart
-php artisan marshmallow:resource Order Ecommerce\\Cart
-php artisan marshmallow:resource OrderItem Ecommerce\\Cart
-php artisan marshmallow:resource Discount Ecommerce\\Cart
-php artisan marshmallow:resource Route Seoable
-```
-
-### Seed tables
-
-We have created seeders for ecommerce site in the Netherlands. If you are running a dutch shop, you can run these seeders. If not, don't run these. Just create your own via the Nova resources you've just created.
-
-```bash
-php artisan db:seed --class=Marshmallow\\Priceable\\Seeders\\CurrencySeeder
-php artisan db:seed --class=Marshmallow\\Priceable\\Seeders\\VatRatesSeeder
-```
-
-### Envoirment file
-
-Make sure you set the `CURRENCY` value in you `.env` file to match the currency you are using.
-
-```env
-CURRENCY=eur
-```
-
-## Events
-
-This package triggers a set of events which you can listen to in your application if you wish to do so.
-
-| Name            | Description                                                  |
-| --------------- | ------------------------------------------------------------ |
-| CustomerCreated | This will be triggered once a new customer has been created. |
-| OrderCreated    | This will be triggerd once a new order has been created.     |
-
-# Discounts
-
-## Setup
-
-To use the discount module, you first need to make sure you have run all the `migrations`.
-
-### Create the Nova resource
-
-You need to publish the Nova resource to be able to create new discount code's in Nova. Run the command below.
-
-```bash
-php artisan marshmallow:resource Discount Ecommerce\\Cart
-```
-
-### Publish the new config
-
-There is a new config file that handles defaults for the discount functionalities. Run the command below to publish the new config file.
-
-```bash
-php artisan vendor:publish --tag="ecommerce-discount-config"
-```
-
-| Key                   | Description                                            |
-| --------------------- | ------------------------------------------------------ |
-| voucher.min_length    | The minimum required length of a voucher code          |
-| voucher.exclude_rules | The exlusion rules for the code generator              |
-| default.vat_rate      | The default `vat rate` we need to use for the discount |
-| default.currency      | The default `currency` we need to use for the discount |
+| Key | Default | Description |
+| --- | --- | --- |
+| `models` | package models | Every model the cart touches, swappable per entry. `product` must point at a model implementing `Purchasable`. |
+| `currency` | `EUR` | ISO 4217 code stamped onto `Price` value objects. |
+| `locale` | `nl_NL` | Locale for the money formatter. |
+| `prices_include_vat` | `true` | Whether back-office prices are entered gross. The `Price` object is gross-canonical either way. |
+| `default_vat_percentage` | `21.0` | Rate a discount line inherits when the cart mixes VAT rates. |
+| `customer_guard` | `web` | Guard used to connect a signed-in user to the cart. |
+| `middleware` | alias `cart`, no exclusions | Middleware class, alias and the request paths it should skip. |
+| `listeners` | merge / disconnect | Login and logout listeners; set to `[]` to opt out. |
+| `stock` | both `true` | Whether `Purchasable::isAvailableForPurchase()` runs on add and again at checkout. |
+| `abandoned` | 30 / 90 days | Days until a quiet cart counts as abandoned, and until it is pruned. |
+| `discount.voucher` | length 8 | Generated voucher shape. |
+| `commands` | `CleanCartsCommand` | The housekeeping command class. |
 
 ## Usage
 
-### Adding a discount
+### Make your product purchasable
 
-To add the discount to a shopping cart, you need to create your own route/endpoint to handle this. You can use the example code below to active the discount. If all is oke, the `$response` will be empty. If something went wrong this method will return an error message containing the reason why we couldn't add the discount to the cart.
+The cart never reaches into your product model directly. Point `config('cart.models.product')` at your model and implement the four-method contract:
+
+```php
+use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
+use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Ecommerce\Cart\Support\Price;
+
+class Product extends Model implements Purchasable
+{
+    public function getPurchasableKey(): int|string
+    {
+        return $this->getKey();
+    }
+
+    public function getPurchasableName(): string
+    {
+        return $this->name;
+    }
+
+    public function getPurchasablePrice(): Price
+    {
+        return Price::fromGross($this->price_cents, 21.0, 'EUR');
+    }
+
+    public function isAvailableForPurchase(int $quantity, ?ShoppingCart $cart = null): bool
+    {
+        return $this->stock >= $quantity;
+    }
+}
+```
+
+Implement `HasPurchasableCategories` as well when you want discounts scoped to categories.
+
+### Work with the cart
 
 ```php
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
-use Marshmallow\Ecommerce\Cart\Models\Discount;
 
-$discount = Discount::byCode(
-    request()->discount
-);
+$cart = Cart::get();
+$cart->add($product, quantity: 2);
+$cart->add($product, quantity: 1, meta: ['size' => 'L']); // meta makes it a separate line
 
-$response = Cart::get()->addDiscount($discount);
-```
+$cart->applyDiscount($discount);   // throws DiscountException when not allowed
+$cart->removeDiscount();
 
-### Deleting a discount
-
-If you made the customer to be able to delete an activated discount from the shopping cart, you will again have to create your own route/endpoint for this. You can then use the example code below to remove the discount from the card.
-
-```php
-use Marshmallow\Ecommerce\Cart\Facades\Cart;
-
-Cart::get()->deleteDiscount();
-```
-
-# Discount cart methods
-
-With the introduction of the discount methods you might need to update the methods that are used in your shopping cart to display cart totals. Please see the new methods below.
-
-```php
-$cart->getTotalAmountWithoutShippingAndDiscount();
-$cart->getTotalAmountWithoutShippingAndDiscountAndWithoutVat();
-$cart->getDiscountAmount();
-$cart->getDiscountAmountWithoutVat();
-```
-
-# Cart methods
-
-```php
-/**
- * These are helper functions to get cart totals.
- */
-$cart->getTotalAmountWithoutShipping();
-$cart->getTotalAmountWithoutShippingAndWithoutVat();
-$cart->getShippingAmount();
-$cart->getShippingAmountWithoutVat();
-$cart->getTotalAmount();
-$cart->getTotalAmountWithoutVat();
+$cart->getSubtotal();              // product lines, gross cents
+$cart->getTotalAmount();           // grand total incl. shipping, discount and fees
 $cart->getTotalVatAmount();
-$cart->getTotalAmountWithoutShippingAndDiscount();
-$cart->getTotalAmountWithoutShippingAndDiscountAndWithoutVat();
-$cart->getDiscountAmount();
-$cart->getDiscountAmountWithoutVat();
 
-/**
- * You can format all the methods above to get a string with currency.
- */
-$cart->getFormatted('getTotalAmount');
-
-/**
- * Extra helpers
- */
-$cart->productCount();
-$cart->getItemsWithoutShipping();
-$cart->getItemsWithoutDiscount();
-$cart->getDiscountItems();
-$cart->getItemsWithoutDiscountAndShipping();
-$cart->getOnlyProductItems();
+$order = $cart->convertToOrder();  // once the cart is paid for — idempotent
 ```
 
-# Item methods
+### Prices
+
+Every amount is an immutable, cents-based value object. The gross amount is canonical, so `net + vat === gross` always holds:
 
 ```php
-$item->setQuantity(4);
-$item->increaseQuantity();
-$item->decreaseQuantity();
+use Marshmallow\Ecommerce\Cart\Support\Price;
 
-// Amount helpers
-$item->getUnitAmount();
-$item->getUnitAmountWithVat();
-$item->getUnitAmountWithoutVat();
-$item->getUnitVatAmount();
-$item->getTotalAmount();
-$item->getTotalAmountWithVat();
-$item->getTotalAmountWithoutVat();
-$item->getTotalVatAmount();
+$price = Price::fromGross(12100, 21.0);   // € 121,00 incl. 21% VAT
+$price->amountExcludingVat;               // 10000
+$price->vatAmount();                      // 2100
 
-// Formatted
-$item->getFormatted('getTotalAmount');
+Price::fromNet(10000, 21.0);              // same price, built from the net side
+$price->multiply(3);                      // line total
+$price->percentage(10);                   // basis for a 10% discount
+$price->format();                         // "€ 121,00" in the configured locale
 ```
 
-## Security
+### Shipping and fees
 
-If you discover any security related issues, please email stef@marshmallow.dev instead of using the issue tracker.
+The customer picks a shipping method; the method prices itself against the cart, with an optional free-over-threshold (`free_from_amount`). A single fee line carries a payment surcharge and is replaced — never stacked — when the choice changes:
+
+```php
+$cart->selectShippingMethod($method);   // null clears shipping (e.g. pickup)
+$cart->setFee('Toeslag VISA', Price::fromGross(150, 21.0));
+$cart->setFee('Toeslag VISA', null);    // remove the surcharge again
+```
+
+### Events
+
+Hook into the full lifecycle without touching package code:
+
+| Event | Fires when |
+| --- | --- |
+| `CartCreated` | a fresh cart is minted for the session |
+| `ItemAdded`, `ItemQuantityChanged`, `ItemRemoved` | product lines change |
+| `DiscountApplied`, `DiscountRejected` | a voucher lands or is refused (with the reason) |
+| `ShippingCalculated` | a shipping method is (re)priced for the cart |
+| `CartMerged` | a guest cart folds into the user's open cart at login |
+| `CustomerCreated` | a prospect is promoted to a customer |
+| `OrderCreated` | the paid cart became an order |
+| `CartAbandoned` | housekeeping flags a quiet cart |
+
+### Extend the models
+
+Every model resolves through `config('cart.models.*')`, so a host application can subclass any of them — to add multi-tenancy, wire in payment, or add its own relations:
+
+```php
+// config/cart.php
+'shopping_cart' => \App\Models\Shop\ShoppingCart::class,
+```
+
+```php
+namespace App\Models\Shop;
+
+use Marshmallow\Payable\Traits\Payable;
+use Marshmallow\Payable\Traits\PayableWithItems;
+
+class ShoppingCart extends \Marshmallow\Ecommerce\Cart\Models\ShoppingCart
+{
+    use Payable;
+    use PayableWithItems;
+}
+```
+
+The cart already exposes everything `marshmallow/payable` asks of a payable model (`getTotalAmount()`, `getPayableDescription()`, the customer getters), so payment is one trait away.
+
+### Housekeeping
+
+Schedule the abandoned-cart command to flag quiet carts (firing `CartAbandoned` per cart) and prune the long-expired ones:
+
+```php
+Schedule::command('ecommerce:clean-carts')->daily();
+```
+
+Dutch translations for the customer-facing discount messages ship with the package; publish them with the `cart-translations` tag to override.
+
+## Testing
+
+```bash
+composer test
+```
+
+The suite runs on Pest with a 100% coverage gate; `composer analyse` runs PHPStan and `composer lint` runs Pint.
+
+## Contributing
+
+Pull requests are welcome. Please open an issue first to discuss substantial changes.
+
+## Security Vulnerabilities
+
+Please report security vulnerabilities by email to stef@marshmallow.dev rather than via the public issue tracker.
 
 ## Credits
 
--   [Stef](https://marshmallow.dev)
--   [All Contributors](https://github.com/marshmallow-packages/ecommerce-cart/contributors)
+- [Stef van Esch](https://github.com/stefvanesch)
+- [All Contributors](https://github.com/marshmallow-packages/ecommerce-cart/contributors)
 
 ## License
 
-The MIT License (MIT). Please see the [License File](LICENSE) for more information.
+The MIT License (MIT).
