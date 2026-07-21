@@ -1,333 +1,266 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Marshmallow\Ecommerce\Cart\Models;
 
-use Illuminate\Database\Eloquent\Casts\Attribute;
-use Illuminate\Support\Str;
-use Marshmallow\Priceable\Price;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Marshmallow\Nova\Flexible\Casts\FlexibleCast;
-use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
-use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
-use Marshmallow\Priceable\Facades\Price as PriceFacade;
+use Illuminate\Support\Carbon;
+use Marshmallow\Ecommerce\Cart\Contracts\HasPurchasableCategories;
+use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
+use Marshmallow\Ecommerce\Cart\Enums\DiscountAppliesTo;
+use Marshmallow\Ecommerce\Cart\Enums\DiscountEligibility;
+use Marshmallow\Ecommerce\Cart\Enums\DiscountPrerequisite;
+use Marshmallow\Ecommerce\Cart\Enums\DiscountType;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
+use Marshmallow\Ecommerce\Cart\Support\Price;
 
+/**
+ * A voucher/discount, applied to a cart as a negative line.
+ *
+ * All monetary fields are stored in cents; converting euros to cents is the
+ * responsibility of the editing layer, not this model.
+ *
+ * @property string $discount_code
+ * @property DiscountType $discount_type
+ * @property DiscountAppliesTo $applies_to
+ * @property array<int, int|string>|null $applies_to_products
+ * @property array<int, int|string>|null $applies_to_product_categories
+ * @property DiscountPrerequisite $prerequisite_type
+ * @property int|null $prerequisite_purchase_amount
+ * @property int|null $prerequisite_quantity
+ * @property DiscountEligibility $eligible_for
+ * @property array<int, string>|null $eligible_for_emails
+ * @property array<int, int|string>|null $eligible_for_customers
+ * @property bool $is_active
+ * @property bool $is_once_per_customer
+ * @property int|null $total_usage_limit
+ * @property int|null $fixed_amount
+ * @property float|null $percentage_amount
+ * @property Carbon|null $starts_at
+ * @property Carbon|null $ends_at
+ */
 class Discount extends Model
 {
-    use PriceFormatter;
-
-    public const TYPE_FIXED_AMOUNT = 'fixed_amount';
-    public const TYPE_PERCENTAGE = 'percentage';
-    public const TYPE_FREE_SHIPPING = 'free_shipping';
-
-    public const APPLIES_TO_ALL = 'all';
-    public const APPLIES_TO_CATEGORIES = 'specific_categories';
-    public const APPLIES_TO_PRODUCTS = 'specific_products';
-
-    public const PREREQUISITE_NONE = 'none';
-    public const PREREQUISITE_PURCHASE_AMOUNT = 'prerequisite_purchase_amount';
-    public const PREREQUISITE_QUANTITY = 'prerequisite_quantity';
-
-    public const ELIGIBLE_FOR_ALL = 'all';
-    public const ELIGIBLE_FOR_CUSTOMERS = 'eligible_for_customers';
-    public const ELIGIBLE_FOR_EMAILS = 'eligible_for_emails';
+    use HasFactory;
 
     protected $guarded = [];
 
-    protected $casts = [
-        'starts_at' => 'datetime',
-        'ends_at' => 'datetime',
-        'is_once_per_customer' => 'boolean',
-        'applies_to_products' => 'array',
-        'applies_to_product_categories' => 'array',
-    ];
-
-    protected static function boot()
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
     {
-        parent::boot();
-
-        static::saving(function ($discount) {
-            if ($discount->discount_type != self::TYPE_FIXED_AMOUNT) {
-                $discount->fixed_amount = null;
-            }
-
-            if ($discount->discount_type != self::TYPE_PERCENTAGE) {
-                $discount->percentage_amount = null;
-            }
-
-            if ($discount->applies_to == self::APPLIES_TO_CATEGORIES) {
-                $categories = $discount->applies_to_product_categories;
-                $categories = (is_array($categories)) ? $categories : json_decode($categories);
-                if (empty($categories)) {
-                    $discount->applies_to = self::APPLIES_TO_ALL;
-                }
-            }
-
-            if ($discount->applies_to == self::APPLIES_TO_PRODUCTS) {
-                $products = $discount->applies_to_products;
-                $products = (is_array($products)) ? $products : json_decode($products);
-                if (empty($products)) {
-                    $discount->applies_to = self::APPLIES_TO_ALL;
-                }
-            }
-
-            if ($discount->applies_to != self::APPLIES_TO_CATEGORIES) {
-                $discount->applies_to_product_categories = null;
-            }
-
-            if ($discount->applies_to != self::APPLIES_TO_PRODUCTS) {
-                $discount->applies_to_products = null;
-            }
-
-            if ($discount->prerequisite_type != self::PREREQUISITE_PURCHASE_AMOUNT) {
-                $discount->prerequisite_purchase_amount = null;
-            }
-
-            if ($discount->prerequisite_type != self::PREREQUISITE_QUANTITY) {
-                $discount->prerequisite_quantity = null;
-            }
-
-            if ($discount->eligible_for == self::ELIGIBLE_FOR_CUSTOMERS) {
-                $customers = $discount->eligible_for_customers;
-                if (empty($customers)) {
-                    $discount->eligible_for = self::ELIGIBLE_FOR_ALL;
-                }
-            }
-
-            if ($discount->eligible_for != self::ELIGIBLE_FOR_CUSTOMERS) {
-                $discount->eligible_for_customers = null;
-            }
-
-            if ($discount->eligible_for != self::ELIGIBLE_FOR_EMAILS) {
-                $discount->eligible_for_emails = null;
-            }
-        });
+        return [
+            'discount_type' => DiscountType::class,
+            'applies_to' => DiscountAppliesTo::class,
+            'applies_to_products' => 'array',
+            'applies_to_product_categories' => 'array',
+            'prerequisite_type' => DiscountPrerequisite::class,
+            'prerequisite_purchase_amount' => 'integer',
+            'prerequisite_quantity' => 'integer',
+            'eligible_for' => DiscountEligibility::class,
+            'eligible_for_emails' => 'array',
+            'eligible_for_customers' => 'array',
+            'is_active' => 'boolean',
+            'is_once_per_customer' => 'boolean',
+            'total_usage_limit' => 'integer',
+            'fixed_amount' => 'integer',
+            'percentage_amount' => 'float',
+            'starts_at' => 'datetime',
+            'ends_at' => 'datetime',
+        ];
     }
 
-    public function setFixedAmountAttribute($amount)
+    public static function byCode(string $code): ?self
     {
-        if ($amount) {
-            $this->attributes['fixed_amount'] = $amount * 100;
-        }
+        return static::where('discount_code', $code)->first();
     }
 
-    public function setPrerequisitePurchaseAmountAttribute($amount)
+    /**
+     * Throw a DiscountException if this discount may not be used on the cart.
+     */
+    public function assertAllowedOn(ShoppingCart $cart): void
     {
-        if ($amount) {
-            $this->attributes['prerequisite_purchase_amount'] = $amount * 100;
-        }
-    }
-
-    public function eligibleForEmails(): Attribute
-    {
-        return new Attribute(
-            set: fn ($value) => json_encode(array_filter(explode("\r\n", $value))),
-            get: fn ($value) => ($value ? join("\n", json_decode($value)) : ''),
-        );
-    }
-
-    public function eligibleForEmailsAsArray()
-    {
-        return json_decode($this->attributes['eligible_for_emails'], true);
-    }
-
-    public function eligibleForCustomers(): Attribute
-    {
-        return new Attribute(
-            set: fn ($value) => json_encode(array_filter(explode("\r\n", $value))),
-            get: fn ($value) => ($value ? join("\n", json_decode($value)) : ''),
-        );
-    }
-
-    public function eligibleForCustomersAsArray()
-    {
-        return json_decode($this->attributes['eligible_for_customers'], true);
-    }
-
-    public static function byCode($code)
-    {
-        return self::where('discount_code', $code)->firstOrFail();
-    }
-
-    public function isAllowed(ShoppingCart $cart): void
-    {
-        if (!$this->is_active) {
-            throw new DiscountException(__('This voucher is not active yet. Please try again later.'), 1);
+        if (! $this->is_active) {
+            throw new DiscountException(__('This voucher is not active yet. Please try again later.'));
         }
 
-        if ($this->starts_at) {
-            if ($this->starts_at > now()) {
-                throw new DiscountException(__('This voucher is not active yet. Please try again later.'), 1);
-            }
+        if ($this->starts_at && $this->starts_at->isFuture()) {
+            throw new DiscountException(__('This voucher is not active yet. Please try again later.'));
         }
 
-        if ($this->ends_at) {
-            if ($this->ends_at < now()) {
-                throw new DiscountException(__('This voucher is not active anymore. It looks like you are a little to late.'), 1);
-            }
+        if ($this->ends_at && $this->ends_at->isPast()) {
+            throw new DiscountException(__('This voucher is not active anymore. It looks like you are a little too late.'));
         }
 
-        $eligable_items = $this->getEligbleForDiscountItems($cart);
-        if (!$eligable_items->count()) {
-            throw new DiscountException(__('This voucher can not be used with the items in your shopping cart.'));
+        $eligibleItems = $this->eligibleItems($cart);
+
+        if ($eligibleItems->isEmpty()) {
+            throw new DiscountException(__('This voucher cannot be used with the items in your shopping cart.'));
         }
 
-        if ($this->prerequisite_type == self::PREREQUISITE_PURCHASE_AMOUNT) {
-            $total_amount = 0;
-            $eligable_items->each(function ($shopping_cart_item) use (&$total_amount) {
-                $total_amount += $shopping_cart_item->getTotalAmount();
-            });
+        $this->assertPrerequisiteMet($eligibleItems);
+        $this->assertCustomerEligible($cart);
+        $this->assertUsageWithinLimits($cart);
+    }
 
-            if ($total_amount < $this->prerequisite_purchase_amount) {
+    public function calculateForCart(ShoppingCart $cart): Price
+    {
+        $amount = match ($this->discount_type) {
+            DiscountType::FixedAmount => $this->fixedAmountDiscount($cart),
+            DiscountType::Percentage => $this->percentageDiscount($cart),
+            DiscountType::FreeShipping => $cart->getShippingAmount(),
+        };
+
+        $cartTotal = $cart->getSubtotal();
+        $amount = min(abs($amount), $cartTotal);
+
+        return Price::fromGross($amount, $this->vatPercentageFor($cart), $this->currencyFor($cart))->negate();
+    }
+
+    /**
+     * @return Collection<int, ShoppingCartItem>
+     */
+    public function eligibleItems(ShoppingCart $cart): Collection
+    {
+        $items = $cart->productItems();
+
+        return match ($this->applies_to) {
+            DiscountAppliesTo::Products => $items->filter(
+                fn (ShoppingCartItem $item): bool => in_array($item->purchasable_id, $this->applies_to_products ?? [], false),
+            )->values(),
+            DiscountAppliesTo::Categories => $items->filter(
+                fn (ShoppingCartItem $item): bool => $this->itemInEligibleCategory($item),
+            )->values(),
+            DiscountAppliesTo::All => $items,
+        };
+    }
+
+    /**
+     * @param  Collection<int, ShoppingCartItem>  $eligibleItems
+     */
+    protected function assertPrerequisiteMet(Collection $eligibleItems): void
+    {
+        if ($this->prerequisite_type === DiscountPrerequisite::PurchaseAmount) {
+            $total = (int) $eligibleItems->sum(fn (ShoppingCartItem $item): int => $item->getTotalAmount());
+
+            if ($total < (int) $this->prerequisite_purchase_amount) {
                 throw new DiscountException(__('This voucher can only be used with a minimum order value of :value.', [
-                    'value' => $this->prerequisite_purchase_amount / 100,
+                    'value' => Price::fromGross((int) $this->prerequisite_purchase_amount, 0)->format(),
                 ]));
             }
-        } elseif ($this->prerequisite_type == self::PREREQUISITE_QUANTITY) {
-            $total_quantity = 0;
-            $eligable_items->each(function ($shopping_cart_item) use (&$total_quantity) {
-                $total_quantity += $shopping_cart_item->quantity;
-            });
+        }
 
-            if ($total_quantity < $this->prerequisite_quantity) {
-                throw new DiscountException(__('This voucher can only be used if you order at lease :amount of these products.', [
+        if ($this->prerequisite_type === DiscountPrerequisite::Quantity) {
+            $quantity = (int) $eligibleItems->sum('quantity');
+
+            if ($quantity < (int) $this->prerequisite_quantity) {
+                throw new DiscountException(__('This voucher can only be used if you order at least :amount of these products.', [
                     'amount' => $this->prerequisite_quantity,
                 ]));
             }
         }
+    }
 
-        if ($this->eligible_for == self::ELIGIBLE_FOR_CUSTOMERS) {
-
+    protected function assertCustomerEligible(ShoppingCart $cart): void
+    {
+        if ($this->eligible_for === DiscountEligibility::Customers) {
             $customer = $cart->getCustomer();
-            if (get_class($customer) != config('cart.models.customer')) {
+
+            if (! $customer instanceof Customer || ! in_array($customer->id, $this->eligible_for_customers ?? [], false)) {
                 throw new DiscountException(__('This voucher can only be used by some customers. Please log in to your account and try again.'));
             }
+        }
 
-            if (!in_array($customer->id, $this->eligibleForCustomersAsArray())) {
-                throw new DiscountException(__('This voucher can only be used by some customers. Sadly, you are not one of them.'));
-            }
-        } elseif ($this->eligible_for == self::ELIGIBLE_FOR_EMAILS) {
+        if ($this->eligible_for === DiscountEligibility::Emails) {
+            $email = $cart->getCustomerEmail();
 
-            $customer = $cart->getCustomer();
-            if (!in_array($customer->email, $this->eligibleForEmailsAsArray())) {
+            if (! $email || ! in_array($email, $this->eligible_for_emails ?? [], true)) {
                 throw new DiscountException(__('This voucher can only be used by some customers. Sadly, you are not one of them.'));
             }
         }
+    }
+
+    protected function assertUsageWithinLimits(ShoppingCart $cart): void
+    {
+        $orderItemModel = config('cart.models.order_item');
 
         if ($this->total_usage_limit) {
-            $used = OrderItem::where('type', ShoppingCartItem::TYPE_DISCOUNT)->where('description', $this->discount_code)->count();
+            $used = $orderItemModel::query()
+                ->where('type', CartItemType::Discount)
+                ->where('description', $this->discount_code)
+                ->count();
+
             if ($used >= $this->total_usage_limit) {
-                throw new DiscountException(__('This voucher is at its full capacity. It looks like you are a little to late.'));
+                throw new DiscountException(__('This voucher is at its full capacity. It looks like you are a little too late.'));
             }
         }
 
-        if ($this->is_once_per_customer) {
-            $email = $cart->getCustomer()->email;
+        if ($this->is_once_per_customer && ($email = $cart->getCustomerEmail())) {
+            $orderTable = (new (config('cart.models.order'))())->getTable();
+            $customerTable = (new Customer)->getTable();
+            $userTable = (new (config('cart.models.user'))())->getTable();
+            $orderItemTable = (new $orderItemModel)->getTable();
 
-            $count = OrderItem::join('orders', 'order_items.order_id', '=', 'orders.id')
-                ->leftJoin('customers', 'orders.customer_id', '=', 'customers.id')
-                ->leftJoin('users', 'orders.user_id', '=', 'users.id')
-                ->where('order_items.type', ShoppingCartItem::TYPE_DISCOUNT)
-                ->where('order_items.description', $this->discount_code)
-                ->where(function ($query) use ($email) {
-                    $query->where('customers.email', $email)
-                        ->orWhere('users.email', $email);
-                })
+            $count = $orderItemModel::query()
+                ->join($orderTable, "{$orderItemTable}.order_id", '=', "{$orderTable}.id")
+                ->leftJoin($customerTable, "{$orderTable}.customer_id", '=', "{$customerTable}.id")
+                ->leftJoin($userTable, "{$orderTable}.user_id", '=', "{$userTable}.id")
+                ->where("{$orderItemTable}.type", CartItemType::Discount->value)
+                ->where("{$orderItemTable}.description", $this->discount_code)
+                ->where(fn ($query) => $query
+                    ->where("{$customerTable}.email", $email)
+                    ->orWhere("{$userTable}.email", $email))
                 ->count();
 
             if ($count) {
-                throw new DiscountException(__('It seams like you have already used this voucher. It is not allowed to use it twice.'));
+                throw new DiscountException(__('It seems like you have already used this voucher. It is not allowed to use it twice.'));
             }
         }
     }
 
-    public function calculateDiscountFromCart(ShoppingCart $cart): Price
+    protected function fixedAmountDiscount(ShoppingCart $cart): int
     {
-        $vatrate = $this->getVatRate($cart);
-        $currency = $this->getCurrency($cart);
+        return min((int) $this->fixed_amount, $cart->getSubtotal());
+    }
 
-        $discount_amount = match ($this->discount_type) {
-            self::TYPE_FIXED_AMOUNT => $this->calculateFixedAmountDiscount($cart),
-            self::TYPE_PERCENTAGE => $this->calculatePercentageDiscount($cart),
-            self::TYPE_FREE_SHIPPING => $this->calculateFreeShippingDiscount($cart),
-            default => 0,
-        };
+    protected function percentageDiscount(ShoppingCart $cart): int
+    {
+        $total = (int) $this->eligibleItems($cart)->sum(fn (ShoppingCartItem $item): int => $item->getTotalAmount());
 
-        $cart_total = $cart->getTotalAmountWithoutShippingAndDiscount();
-        $discount_amount = abs($discount_amount);
-        $discount_amount = ($discount_amount >= $cart_total) ? $cart_total : $discount_amount;
-        $discount_amount = 0 - $discount_amount;
+        return (int) round($total * (float) $this->percentage_amount / 100);
+    }
 
-        $display_is_including_vat = true;
+    protected function itemInEligibleCategory(ShoppingCartItem $item): bool
+    {
+        $purchasable = $item->resolvePurchasable();
 
-        return PriceFacade::make(
-            $vatrate,
-            $currency,
-            $discount_amount,
-            $display_is_including_vat
+        if (! $purchasable instanceof HasPurchasableCategories) {
+            return false;
+        }
+
+        return (bool) array_intersect(
+            $purchasable->getPurchasableCategoryKeys(),
+            $this->applies_to_product_categories ?? [],
         );
     }
 
-    protected function calculateFixedAmountDiscount(ShoppingCart $cart)
+    protected function vatPercentageFor(ShoppingCart $cart): float
     {
-        $fixed_amount = $this->fixed_amount;
-        $cart_total = $cart->getTotalAmountWithoutShippingAndDiscount();
+        $rates = $cart->productItems()->pluck('vat_percentage')->unique();
 
-        if ($fixed_amount >= $cart_total) {
-            return $cart_total;
-        }
-
-        return $fixed_amount;
+        return $rates->count() === 1
+            ? (float) $rates->first()
+            : (float) config('cart.default_vat_percentage', 21.0);
     }
 
-    protected function calculateFreeShippingDiscount(ShoppingCart $cart)
+    protected function currencyFor(ShoppingCart $cart): string
     {
-        return $cart->getShippingAmount();
-    }
+        $currency = $cart->productItems()->pluck('currency')->first();
 
-    protected function calculatePercentageDiscount(ShoppingCart $cart)
-    {
-        $total_amount = 0;
-        $elible_for_discount = $this->getEligbleForDiscountItems($cart);
-        $elible_for_discount->each(function ($shopping_cart_item) use (&$total_amount) {
-            $total_amount += $shopping_cart_item->getTotalAmount();
-        });
-
-        if (!$total_amount) {
-            return null;
-        }
-
-        $discount_amount = ($total_amount / 100) * $this->percentage_amount;
-        return round($discount_amount, 2);
-    }
-
-    protected function getEligbleForDiscountItems(ShoppingCart $cart)
-    {
-        $items = $cart->getItemsWithoutDiscountAndShipping();
-        if ($this->applies_to == self::APPLIES_TO_CATEGORIES) {
-            return $items->reject(function ($item) {
-                return !in_array($item->product->product_category_id, $this->applies_to_product_categories);
-            });
-        } elseif ($this->applies_to == self::APPLIES_TO_PRODUCTS) {
-            return $items->reject(function ($item) {
-                return !in_array($item->product_id, $this->applies_to_products);
-            });
-        }
-
-        return $cart->getItemsWithoutDiscountAndShipping();
-    }
-
-    public function getVatRate(ShoppingCart $cart)
-    {
-        return config('cart.models.vat_rate')::find(
-            config('cart-discount.default.vat_rate')
-        );
-    }
-
-    public function getCurrency(ShoppingCart $cart)
-    {
-        return config('cart.models.currency')::find(
-            config('cart-discount.default.currency')
-        );
+        return is_string($currency) ? $currency : (string) config('cart.currency', 'EUR');
     }
 }

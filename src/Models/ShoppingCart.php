@@ -1,146 +1,506 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Marshmallow\Ecommerce\Cart\Models;
 
-use Illuminate\Support\Str;
-use Marshmallow\Priceable\Price;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Marshmallow\Payable\Traits\Payable;
-use Marshmallow\Product\Models\Product;
-use Marshmallow\Addressable\Models\Address;
-use Marshmallow\Ecommerce\Cart\Facades\Cart;
-use Marshmallow\Ecommerce\Cart\Traits\Totals;
-use Marshmallow\Addressable\Models\AddressType;
-use Marshmallow\Payable\Traits\PayableWithItems;
-use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Marshmallow\Addressable\Models\Address;
+use Marshmallow\Addressable\Models\AddressType;
+use Marshmallow\Ecommerce\Cart\Concerns\CalculatesTotals;
+use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
+use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
+use Marshmallow\Ecommerce\Cart\Events\CartCreated;
+use Marshmallow\Ecommerce\Cart\Events\DiscountApplied;
+use Marshmallow\Ecommerce\Cart\Events\DiscountRejected;
+use Marshmallow\Ecommerce\Cart\Events\ItemAdded;
+use Marshmallow\Ecommerce\Cart\Events\ShippingCalculated;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
+use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
+use Marshmallow\Ecommerce\Cart\Support\Price;
+use Marshmallow\Payable\Traits\Payable;
+use Marshmallow\Payable\Traits\PayableWithItems;
 
+/**
+ * A shopping cart, identified by a UUID kept in the session.
+ *
+ * The cart is the payable entity: payment happens against the cart, and only a
+ * paid cart is converted into an immutable {@see Order}. Every money figure is
+ * summed from the item snapshots by {@see CalculatesTotals}.
+ *
+ * @property string $id
+ * @property int $display_id
+ * @property string $guard_token
+ * @property int|null $user_id
+ * @property int|null $customer_id
+ * @property int|null $prospect_id
+ * @property int|null $shipping_address_id
+ * @property int|null $invoice_address_id
+ * @property int|null $shipping_method_id
+ * @property string|null $note
+ * @property Carbon|null $confirmed_at
+ * @property Collection<int, ShoppingCartItem> $items
+ * @property-read Prospect|null $prospect
+ * @property-read Customer|null $customer
+ * @property-read ShippingMethod|null $shippingMethod
+ */
 class ShoppingCart extends Model
 {
-    use Totals;
+    use CalculatesTotals;
     use Payable;
-    use PriceFormatter;
     use PayableWithItems;
+    use SoftDeletes;
 
-    const SESSION_KEY = 'cart';
+    public const SESSION_KEY = 'cart';
+
+    public const SESSION_TOKEN_KEY = 'cart_token';
+
+    protected $keyType = 'string';
+
+    public $incrementing = false;
 
     protected $guarded = [];
 
-    protected static function boot()
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
     {
-        parent::boot();
+        return [
+            'confirmed_at' => 'datetime',
+        ];
+    }
 
-        static::creating(function ($cart) {
-
-            $cart->display_id = $cart->max('display_id') + 1;
-
-            $guard = Cart::getUserGuard();
-            if (Auth::guard($guard)->check()) {
-                $cart->connectUser(Auth::guard($guard)->user());
-            }
-
-            if (!$cart->getKey()) {
+    protected static function booted(): void
+    {
+        static::creating(function (ShoppingCart $cart): void {
+            if (! $cart->getKey()) {
                 $cart->{$cart->getKeyName()} = (string) Str::uuid();
             }
 
-            $cart->hashed_ip_address = Hash::make(request()->ip());
+            // display_id is a global, sequential counter; ignore any host global
+            // scope (e.g. a per-site scope) so it stays unique across the table.
+            $cart->display_id ??= ((int) static::withoutGlobalScopes()->max('display_id')) + 1;
+            $cart->guard_token ??= Str::random(64);
 
-            /**
-             * Only create a prospect if its not provided.
-             */
-            if (!$cart->prospect_id) {
+            $guard = Cart::getUserGuard();
+            if (Auth::guard($guard)->check()) {
+                $cart->fillFromUser(Auth::guard($guard)->user());
+            }
+
+            if (! $cart->prospect_id) {
                 $prospect = config('cart.models.prospect')::create([]);
                 $cart->prospect_id = $prospect->id;
                 $cart->customer_id = $prospect->getCustomer()?->id;
             }
         });
+
+        static::created(function (ShoppingCart $cart): void {
+            event(new CartCreated($cart));
+        });
     }
 
-    public function add(Product $product, float $quantity = 1): ShoppingCartItem
+    /*
+    |--------------------------------------------------------------------------
+    | Adding items
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Add a purchasable to the cart at its own price.
+     *
+     * @param  array<string, mixed>|null  $meta
+     */
+    public function add(Purchasable $purchasable, int $quantity = 1, ?array $meta = null): ShoppingCartItem
     {
+        $this->guardAvailability($purchasable, $quantity, 'check_on_add');
+
         return $this->addCustom(
-            $product->fullname(),
-            $product->getPriceHelper(),
-            ShoppingCartItem::TYPE_PRODUCT,
-            true,
-            $quantity,
-            $product
+            description: $purchasable->getPurchasableName(),
+            price: $purchasable->getPurchasablePrice(),
+            type: CartItemType::Product,
+            quantity: $quantity,
+            purchasable: $purchasable,
+            meta: $meta,
         );
     }
 
-    public function addCustom(string $description, Price $price, string $type, bool $visible_in_cart = true, float $quantity = 1, ?Product $product = null, bool $should_combine_products = true): ShoppingCartItem
-    {
-        $cart = ($this->id) ? $this : config('cart.models.shopping_cart')::completelyNew();
+    /**
+     * Add an arbitrary line to the cart, snapshotting the given price.
+     *
+     * @param  array<string, mixed>|null  $meta
+     */
+    public function addCustom(
+        string $description,
+        Price $price,
+        CartItemType $type,
+        bool $visibleInCart = true,
+        int $quantity = 1,
+        ?Purchasable $purchasable = null,
+        ?array $meta = null,
+        bool $combine = true,
+    ): ShoppingCartItem {
+        $cart = $this->exists ? $this : static::completelyNew();
 
-        $method = $should_combine_products ? 'firstOrNew' : 'create';
-
-        $cart_item = config('cart.models.shopping_cart_item')::{$method}([
+        $attributes = [
             'shopping_cart_id' => $cart->id,
-            'product_id' => ($product) ? $product->id : null,
-            'vatrate_id' => $price->vatrate->id,
-            'currency_id' => $price->currency->id,
+            'purchasable_id' => $purchasable?->getPurchasableKey(),
             'description' => $description,
             'type' => $type,
-            'display_price' => $price->display_amount,
-            'price_excluding_vat' => $price->price_excluding_vat,
-            'price_including_vat' => $price->price_including_vat,
-            'vat_amount' => $price->vat_amount,
-            'visible_in_cart' => $visible_in_cart,
-        ]);
+            'price_excluding_vat' => $price->amountExcludingVat,
+            'price_including_vat' => $price->amountIncludingVat,
+            'vat_amount' => $price->vatAmount(),
+            'vat_percentage' => $price->vatPercentage,
+            'currency' => $price->currency,
+            'meta' => $meta,
+            'visible_in_cart' => $visibleInCart,
+        ];
 
-        $cart_item->quantity = ($cart_item->quantity + $quantity);
-        $cart_item->save();
+        $itemModel = config('cart.models.shopping_cart_item');
+        $item = new $itemModel($attributes);
+        $signature = $item->buildSignature();
 
-        return $cart_item;
+        /** @var ShoppingCartItem|null $existing */
+        $existing = $combine
+            ? $cart->items()->where('signature', $signature)->first()
+            : null;
+
+        if ($existing) {
+            $existing->increaseQuantity($quantity);
+
+            return $existing;
+        }
+
+        $item->quantity = $quantity;
+        $item->save();
+
+        event(new ItemAdded($cart, $item));
+
+        return $item;
     }
 
-    public function getShippingItem()
+    /*
+    |--------------------------------------------------------------------------
+    | Recalculation
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * React to a change in the cart's contents. Shipping and discount lines are
+     * derived, so a change to one of them must not trigger another pass — that
+     * is what keeps this from recursing.
+     */
+    public function shoppingCartContentChanged(ShoppingCartItem $item): void
     {
-        return $this->items()->where('type', config('cart.models.shopping_cart_item')::TYPE_SHIPPING)->first();
+        if ($item->isShippingCost() || $item->isDiscount() || $item->isFee()) {
+            return;
+        }
+
+        $this->unsetRelation('items');
+        $this->calculateShippingCost();
+        $this->recalculateDiscount();
     }
 
-    public function shoppingCartContentChanged(ShoppingCartItem $item)
+    public function getShippingItem(): ?ShoppingCartItem
     {
-        if (!$item->isShippingCost() && !$item->isDiscount()) {
-            $this->calculateShippingCost();
-            $this->recalculateDiscount();
+        return $this->shippingItems()->first();
+    }
+
+    protected function calculateShippingCost(): void
+    {
+        $this->getShippingItem()?->delete();
+        $this->unsetRelation('items');
+
+        $method = config('cart.models.shipping_method')::calculateFromCart($this);
+
+        if (! $method) {
+            $this->forceFill(['shipping_method_id' => null])->saveQuietly();
+            event(new ShippingCalculated($this, null, Price::zero()));
+
+            return;
+        }
+
+        $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
+
+        $price = $method->toPrice();
+        $this->addCustom($method->name, $price, CartItemType::Shipping, visibleInCart: false);
+
+        event(new ShippingCalculated($this, $method, $price));
+    }
+
+    protected function recalculateDiscount(): void
+    {
+        $discountItem = $this->discountItems()->first();
+
+        if (! $discountItem) {
+            return;
+        }
+
+        $code = $discountItem->description;
+        $discountItem->delete();
+        $this->unsetRelation('items');
+
+        $discount = config('cart.models.discount')::byCode($code);
+
+        if ($discount) {
+            $this->applyDiscount($discount);
         }
     }
 
-    public function convertToInquiry()
+    /**
+     * Apply a discount to the cart, or reject it with a reason.
+     */
+    public function applyDiscount(Discount $discount): void
     {
-        $inquiry = config('cart.models.inquiry')::create([
-            'prospect_id' => $this->prospect_id,
-            'note' => $this->note,
-            'shopping_cart_id' => $this->id,
-        ]);
+        try {
+            $discount->assertAllowedOn($this);
+            $price = $discount->calculateForCart($this);
+            $this->addCustom($discount->discount_code, $price, CartItemType::Discount, visibleInCart: false);
+            $this->unsetRelation('items');
+            event(new DiscountApplied($this, $discount, $price));
+        } catch (DiscountException $e) {
+            event(new DiscountRejected($this, $discount, $e->getMessage()));
 
-        foreach ($this->items as $item) {
-            $inquiry->items()->create([
-                'product_id' => $item->product_id,
-                'quantity' => $item->quantity,
-            ]);
+            throw $e;
+        }
+    }
+
+    public function removeDiscount(): void
+    {
+        $this->discountItems()->each(fn (ShoppingCartItem $item) => $item->delete());
+        $this->unsetRelation('items');
+    }
+
+    /**
+     * Apply the shipping method the customer picked, replacing whatever shipping
+     * line the cart held. Passing null clears shipping entirely (e.g. pickup).
+     * The method prices itself against the current cart, so a "free over X"
+     * method lands at zero once the order is large enough.
+     */
+    public function selectShippingMethod(?ShippingMethod $method): void
+    {
+        $this->getShippingItem()?->delete();
+        $this->unsetRelation('items');
+
+        if (! $method) {
+            $this->forceFill(['shipping_method_id' => null])->saveQuietly();
+
+            return;
         }
 
-        return $inquiry;
+        $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
+        $this->addCustom($method->name, $method->priceForCart($this), CartItemType::Shipping, visibleInCart: false);
+        $this->unsetRelation('items');
     }
 
-    public function convertToOrder()
+    /**
+     * Set (or clear) a single fee line, such as a payment surcharge. Passing
+     * null or a zero price removes it, so switching to a method without a
+     * surcharge leaves no stray line behind.
+     */
+    public function setFee(string $description, ?Price $price): void
     {
-        return config('cart.models.order')::createUniqueFromShoppingCart($this);
+        $this->feeItems()->each(fn (ShoppingCartItem $item) => $item->delete());
+        $this->unsetRelation('items');
+
+        if ($price && ! $price->isZero()) {
+            $this->addCustom($description, $price, CartItemType::Fee, visibleInCart: true);
+            $this->unsetRelation('items');
+        }
     }
 
-    public function getTrackAndTraceId()
+    /*
+    |--------------------------------------------------------------------------
+    | Users, customers & addresses
+    |--------------------------------------------------------------------------
+    */
+
+    public function fillFromUser(Model $user): void
     {
-        return $this->id;
+        $user = $user->fresh();
+        $this->user_id = $user->getKey();
+        $this->customer_id = $this->customerKeyFromUser($user);
+
+        if (! method_exists($user, 'getDefaultAddress')) {
+            return;
+        }
+
+        $shipping = $this->defaultAddressOf($user, AddressType::SHIPPING);
+        if ($shipping && ! $this->hasShippingAddress()) {
+            $this->shipping_address_id = $shipping->id;
+        }
+
+        $invoice = $this->defaultAddressOf($user, AddressType::INVOICE);
+        if ($invoice && ! $this->hasInvoiceAddress()) {
+            $this->invoice_address_id = $invoice->id;
+        }
     }
+
+    /**
+     * The key of the customer a user maps to, if any. A host User need not have
+     * a customer relation at all; when it does not, the cart simply carries no
+     * customer and resolves one from its prospect at checkout instead. Reading
+     * the relation only when it exists keeps a strict-mode host from throwing a
+     * MissingAttributeException on login.
+     */
+    protected function customerKeyFromUser(Model $user): int|string|null
+    {
+        if (! method_exists($user, 'customer')) {
+            return null;
+        }
+
+        // The relation is provided by the host User; the guard above proves it
+        // exists, so reading it will not throw under strict attribute access.
+        $customer = $user->customer; // @phpstan-ignore property.notFound
+
+        return $customer instanceof Model ? $customer->getKey() : null;
+    }
+
+    /**
+     * A user's default address of a given type, or null when the address book
+     * (or the address type itself) is not set up. A shop that has not defined
+     * its address types must not crash the login flow.
+     */
+    protected function defaultAddressOf(Model $user, string $type): ?Address
+    {
+        try {
+            // The host User provides getDefaultAddress() via the Addressable
+            // trait; the caller has already checked it exists.
+            $address = $user->getDefaultAddress($type); // @phpstan-ignore method.notFound
+
+            return $address instanceof Address ? $address : null;
+        } catch (ModelNotFoundException) {
+            return null;
+        }
+    }
+
+    public function connectUser(Model $user): void
+    {
+        $this->fillFromUser($user);
+        $this->save();
+    }
+
+    public function disconnectUser(): void
+    {
+        $this->update([
+            'user_id' => null,
+            'customer_id' => null,
+        ]);
+    }
+
+    public function addCustomerIfExists(): void
+    {
+        if ($this->customer_id) {
+            return;
+        }
+
+        $this->customer_id = $this->prospect?->getCustomer()?->id;
+        $this->saveQuietly();
+    }
+
+    public function hasShippingAddress(): bool
+    {
+        return $this->shipping_address_id !== null;
+    }
+
+    public function hasInvoiceAddress(): bool
+    {
+        return $this->invoice_address_id !== null;
+    }
+
+    public function connectShippingAddress(Address $address): void
+    {
+        $this->update(['shipping_address_id' => $address->id]);
+    }
+
+    public function connectInvoiceAddress(Address $address): void
+    {
+        $this->update(['invoice_address_id' => $address->id]);
+    }
+
+    public function getCustomerOrProspect(): Customer|Prospect|null
+    {
+        return $this->customer ?? $this->prospect;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Conversion
+    |--------------------------------------------------------------------------
+    */
+
+    public function convertToOrder(): Order
+    {
+        return config('cart.models.order')::createFromShoppingCart($this);
+    }
+
+    /**
+     * Fold another cart's product lines into this one, combining matching lines
+     * and copying over a note or addresses this cart is still missing. The
+     * source cart is emptied and soft-deleted.
+     */
+    public function mergeFrom(ShoppingCart $source): void
+    {
+        /** @var iterable<ShoppingCartItem> $productItems */
+        $productItems = $source->items()->where('type', CartItemType::Product)->get();
+
+        foreach ($productItems as $item) {
+            $this->absorbItem($item);
+        }
+
+        $this->note ??= $source->note;
+        $this->shipping_address_id ??= $source->shipping_address_id;
+        $this->invoice_address_id ??= $source->invoice_address_id;
+        $this->save();
+
+        $source->delete();
+    }
+
+    protected function absorbItem(ShoppingCartItem $item): void
+    {
+        $purchasable = $item->resolvePurchasable();
+
+        if ($purchasable && ! $purchasable->isAvailableForPurchase($item->quantity, $this)) {
+            return;
+        }
+
+        /** @var ShoppingCartItem|null $existing */
+        $existing = $this->items()->where('signature', $item->signature)->first();
+        if ($existing) {
+            $existing->increaseQuantity($item->quantity);
+
+            return;
+        }
+
+        $copy = $item->replicate(['shopping_cart_id']);
+        $copy->shopping_cart_id = $this->id;
+        $copy->save();
+    }
+
+    public function hasExcludedShipping(): bool
+    {
+        return false;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payable contract
+    |--------------------------------------------------------------------------
+    */
 
     public function getPayableDescription(): string
     {
-        return __('Order') . " #{$this->display_id}";
+        return __('Order').' #'.$this->display_id;
     }
 
     public function getCustomer(): ?Model
@@ -150,290 +510,139 @@ class ShoppingCart extends Model
 
     public function getCustomerName(): ?string
     {
-        $customer = $this->getCustomer();
-        if ($customer && $name = $customer->getFullName()) {
-            return $name;
-        }
-
-        return null;
+        return $this->getCustomerOrProspect()?->getFullName() ?: null;
     }
 
     public function getCustomerEmail(): ?string
     {
-        $customer = $this->getCustomer();
-        if ($customer && $email = $customer->email) {
-            return $email;
-        }
-
-        return null;
+        return $this->getCustomerOrProspect()?->email;
     }
-
 
     public function getCustomerPhonenumber(): ?string
     {
-        $customer = $this->getCustomer();
-        if ($customer && $phone_number = $customer->phone_number) {
-            return $phone_number;
-        }
-
-        return null;
+        return $this->getCustomerOrProspect()?->phone_number;
     }
 
-    public function getCustomerId(): ?string
-    {
-        $customer = $this->getCustomer();
-        if ($customer && $customer_id = $customer->id) {
-            return $customer_id;
-        }
+    /*
+    |--------------------------------------------------------------------------
+    | Session lifecycle
+    |--------------------------------------------------------------------------
+    */
 
-        return null;
-    }
-
-    public function getCustomerPayableExternalId(): ?string
-    {
-        $customer = $this->getCustomer();
-        if ($customer && $external_id = $customer->payable_external_id) {
-            return $external_id;
-        }
-
-        return null;
-    }
-
-
-    public function addCustomerIfExists(): void
-    {
-        if ($this->customer_id) {
-            return;
-        }
-
-        $prospect = $this->prospect;
-        $this->customer_id = $prospect->getCustomer()?->id;
-        $this->saveQuietly();
-    }
-
-    public function hasExcludedShipping(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Protected
-     */
-    protected function calculateShippingCost()
-    {
-        $shipping_item = $this->items->where('type', config('cart.models.shopping_cart_item')::TYPE_SHIPPING)->first();
-        if ($shipping_item) {
-            $shipping_item->delete();
-        }
-
-        $shipping_method = config('cart.models.shipping_method')::calculateFromCart($this);
-
-        if ($shipping_method) {
-            $price = $shipping_method->getPriceHelper();
-            $this->addCustom($shipping_method->name, $price, config('cart.models.shopping_cart_item')::TYPE_SHIPPING, false);
-        }
-    }
-
-    protected function recalculateDiscount()
-    {
-        $shopping_cart_discount_item = $this->getDiscountItems()->first();
-        if ($shopping_cart_discount_item) {
-            $code = $shopping_cart_discount_item->description;
-            $shopping_cart_discount_item->delete();
-            $discount = config('cart.models.discount')::byCode($code);
-            $this->addDiscount($discount);
-        }
-    }
-
-    public function addDiscount(Discount $discount)
-    {
-        try {
-            $discount->isAllowed($this);
-            $price = $discount->calculateDiscountFromCart($this);
-            $this->addCustom($discount->discount_code, $price, config('cart.models.shopping_cart_item')::TYPE_DISCOUNT, false);
-        } catch (DiscountException $e) {
-            return $e->getMessage();
-        }
-    }
-
-    public function deleteDiscount()
-    {
-        $this->getDiscountItems()->each(function ($item) {
-            $item->delete();
-        });
-    }
-
-    public function connectUser($user)
-    {
-        $user = $user->fresh();
-        $this->user_id = $user->id;
-        $this->customer_id = ($user->customer) ? $user->customer->id : null;
-        $this->update();
-
-        if (method_exists($user, 'addresses')) {
-            $default_shipping = $user->getDefaultAddress(AddressType::SHIPPING);
-            if ($default_shipping && $this->doesNotHaveShippingAddress()) {
-                $this->connectShippingAddress($default_shipping);
-            }
-
-            $default_invoice = $user->getDefaultAddress(AddressType::INVOICE);
-            if ($default_invoice && $this->doesNotHaveInvoiceAddress()) {
-                $this->connectInvoiceAddress($default_invoice);
-            }
-        }
-    }
-
-    public function disconnectUser()
-    {
-        $this->update([
-            'user_id' => null,
-            'customer_id' => null,
-        ]);
-    }
-
-    public function getCustomerOrProspect()
-    {
-        return ($this->customer) ? $this->customer : $this->prospect;
-    }
-
-    public function doesNotHaveShippingAddress(): bool
-    {
-        return !$this->hasShippingAddress();
-    }
-
-    public function hasShippingAddress(): bool
-    {
-        return ($this->shipping_address_id !== null);
-    }
-
-    public function connectShippingAddress(Address $address)
-    {
-        $this->shipping_address_id = $address->id;
-        $this->update();
-    }
-
-    public function doesNotHaveInvoiceAddress(): bool
-    {
-        return !$this->hasInvoiceAddress();
-    }
-
-    public function hasInvoiceAddress(): bool
-    {
-        return ($this->invoice_address_id !== null);
-    }
-
-    public function connectInvoiceAddress(Address $address)
-    {
-        $this->invoice_address_id = $address->id;
-        $this->update();
-    }
-
-    /**
-     * Statics
-     */
     public static function getBySession(): ?ShoppingCart
     {
-        $cart = self::find(
-            session()->get(self::SESSION_KEY)
-        );
+        $cart = static::find(session()->get(self::SESSION_KEY));
 
-        if ($cart && !$cart->user && !$cart->customer && !$cart->prospect) {
-            return self::completelyNew();
+        if ($cart && ! $cart->user && ! $cart->customer && ! $cart->prospect) {
+            return static::completelyNew();
         }
 
         return $cart;
     }
 
-    public static function completelyNew(): ShoppingCart
+    public static function completelyNew(int $attempts = 0): ShoppingCart
     {
         try {
-            $cart = self::create();
+            $cart = static::create();
             session()->put(self::SESSION_KEY, $cart->id);
+            session()->put(self::SESSION_TOKEN_KEY, $cart->guard_token);
+
             return $cart;
         } catch (UniqueConstraintViolationException $e) {
-            return self::completelyNew();
+            if ($attempts >= 3) {
+                throw $e;
+            }
+
+            return static::completelyNew($attempts + 1);
         }
     }
 
     public static function newWithSameProspect(ShoppingCart $cart): ShoppingCart
     {
-        $new_cart = self::completelyNew();
-        $new_cart->prospect_id = $cart->prospect_id;
-        $new_cart->update();
+        $new = static::completelyNew();
+        $new->update(['prospect_id' => $cart->prospect_id]);
 
-        session()->put(self::SESSION_KEY, $new_cart->id);
-
-        return $new_cart;
-    }
-
-    /*
-     * Deze check wordt uitgevoerd door de cart resources.
-     * Voor nu checken we alleen op gehashte ip addressen, in de
-     * toekomst kan hier misschien een user check bij komen.
-     */
-    public function authorized()
-    {
-        return (Hash::check(request()->ip(), $this->hashed_ip_address));
-    }
-
-    public function visibleItems()
-    {
-        return self::items()->visable()->get();
+        return $new;
     }
 
     /**
-     * Relationships
+     * The user's most recent cart that has not yet been paid for, if any.
      */
-    public function prospect()
+    public static function latestOpenForUser(Model $user): ?ShoppingCart
     {
-        return $this->belongsTo(config('cart.models.prospect'));
+        return static::query()
+            ->where('user_id', $user->getKey())
+            ->whereNull('confirmed_at')
+            ->latest()
+            ->first();
     }
 
-    public function customer()
+    /**
+     * Whether the current session is allowed to read this cart. The random
+     * guard token was stored in the session when the cart was created; only a
+     * session holding it may act on the cart.
+     */
+    public function authorized(): bool
     {
-        return $this->belongsTo(config('cart.models.customer'));
+        $token = session()->get(self::SESSION_TOKEN_KEY);
+
+        return is_string($token) && hash_equals($this->guard_token, $token);
     }
 
-    public function items()
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
+
+    public function items(): HasMany
     {
         return $this->hasMany(config('cart.models.shopping_cart_item'));
     }
 
-    public function countries()
+    public function prospect(): BelongsTo
     {
-        return config('cart.models.country')::ordered()->get();
+        return $this->belongsTo(config('cart.models.prospect'));
     }
 
-    public function user()
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(config('cart.models.customer'));
+    }
+
+    public function user(): BelongsTo
     {
         return $this->belongsTo(config('cart.models.user'));
     }
 
-    public function shippingAddress()
+    public function shippingMethod(): BelongsTo
+    {
+        return $this->belongsTo(config('cart.models.shipping_method'));
+    }
+
+    public function shippingAddress(): BelongsTo
     {
         return $this->belongsTo(config('cart.models.address'), 'shipping_address_id');
     }
 
-    public function invoiceAddress()
+    public function invoiceAddress(): BelongsTo
     {
         return $this->belongsTo(config('cart.models.address'), 'invoice_address_id');
     }
 
-    /**
-     * Model setup
-     */
-    public function getIncrementing()
-    {
-        return false;
-    }
-
-    public function getKeyType()
-    {
-        return 'string';
-    }
-
-    public function getRouteKeyName()
+    public function getRouteKeyName(): string
     {
         return 'id';
+    }
+
+    private function guardAvailability(Purchasable $purchasable, int $quantity, string $configKey): void
+    {
+        if (! config("cart.stock.{$configKey}", true)) {
+            return;
+        }
+
+        if (! $purchasable->isAvailableForPurchase($quantity, $this)) {
+            throw PurchasableUnavailableException::for($purchasable, $quantity);
+        }
     }
 }

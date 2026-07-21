@@ -1,0 +1,12 @@
+{
+    "This voucher is not active yet. Please try again later.": "Deze kortingscode is nog niet actief. Probeer het later opnieuw.",
+    "This voucher is not active anymore. It looks like you are a little too late.": "Deze kortingscode is niet meer geldig. Je bent helaas net te laat.",
+    "This voucher cannot be used with the items in your shopping cart.": "Deze kortingscode kan niet worden gebruikt met de artikelen in je winkelmand.",
+    "This voucher can only be used with a minimum order value of :value.": "Deze kortingscode geldt alleen bij een minimale bestelwaarde van :value.",
+    "This voucher can only be used if you order at least :amount of these products.": "Deze kortingscode geldt alleen als je minimaal :amount van deze producten bestelt.",
+    "This voucher can only be used by some customers. Please log in to your account and try again.": "Deze kortingscode is voorbehouden aan bepaalde klanten. Log in op je account en probeer het opnieuw.",
+    "This voucher can only be used by some customers. Sadly, you are not one of them.": "Deze kortingscode is voorbehouden aan bepaalde klanten. Je hoort daar helaas niet bij.",
+    "This voucher is at its full capacity. It looks like you are a little too late.": "Deze kortingscode heeft zijn maximum bereikt. Je bent helaas net te laat.",
+    "It seems like you have already used this voucher. It is not allowed to use it twice.": "Je hebt deze kortingscode al gebruikt. Hij kan niet nogmaals worden ingezet.",
+    "Order": "Bestelling"
+}
