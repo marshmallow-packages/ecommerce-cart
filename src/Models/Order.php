@@ -29,9 +29,15 @@ class Order extends Model
     public static function createUniqueFromShoppingCart(ShoppingCart $shoppingCart)
     {
         /**
-         * Check if its already converted.
+         * Check if its already converted. Without global scopes on purpose:
+         * an application can hide not-yet-finalized orders behind a global
+         * scope, and missing an existing order here would violate the unique
+         * shopping_cart_id constraint.
          */
-        $order = self::where('shopping_cart_id', $shoppingCart->id)->first();
+        $order = self::query()
+            ->withoutGlobalScopes()
+            ->where('shopping_cart_id', $shoppingCart->id)
+            ->first();
         if ($order) {
             if ($order->customer_id && !$shoppingCart->customer_id) {
                 $shoppingCart->update([
@@ -99,10 +105,12 @@ class Order extends Model
              * Delete the address of the prospect. We will be deleting
              * the prospect as well because it's not a prospect anymore.
              */
-            $prospect->addresses->each(function ($address) {
-                $address->delete();
-            });
-            $prospect->delete();
+            if ($prospect) {
+                $prospect->addresses->each(function ($address) {
+                    $address->delete();
+                });
+                $prospect->delete();
+            }
         }
 
 
