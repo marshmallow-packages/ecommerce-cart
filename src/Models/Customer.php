@@ -38,12 +38,12 @@ class Customer extends Model
 
     public function cart(): HasOne
     {
-        return $this->hasOne(config('cart.models.shopping_cart'));
+        return $this->hasOne(config('cart.models.shopping_cart'), 'customer_id');
     }
 
     public function orders(): HasMany
     {
-        return $this->hasMany(config('cart.models.order'));
+        return $this->hasMany(config('cart.models.order'), 'customer_id');
     }
 
     public function country(): BelongsTo

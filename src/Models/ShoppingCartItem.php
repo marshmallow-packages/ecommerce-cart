@@ -132,8 +132,12 @@ class ShoppingCartItem extends Model implements CartLine
      */
     public function buildSignature(): string
     {
+        // The key is stored in a string column, so a line read back from the
+        // database carries "42" where the purchasable handed in 42. Normalise
+        // before hashing, or the signature would change on the first re-save
+        // and later additions of the same product would stop combining.
         return hash('xxh128', (string) json_encode([
-            'purchasable_id' => $this->purchasable_id,
+            'purchasable_id' => $this->purchasable_id === null ? null : (string) $this->purchasable_id,
             'type' => $this->type->value,
             'meta' => $this->meta,
         ]));

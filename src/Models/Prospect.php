@@ -102,7 +102,7 @@ class Prospect extends Model
 
     public function cart(): HasOne
     {
-        return $this->hasOne(config('cart.models.shopping_cart'));
+        return $this->hasOne(config('cart.models.shopping_cart'), 'prospect_id');
     }
 
     public function country(): BelongsTo

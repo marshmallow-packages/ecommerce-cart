@@ -269,7 +269,7 @@ class Order extends Model
 
     public function items(): HasMany
     {
-        return $this->hasMany(config('cart.models.order_item'));
+        return $this->hasMany(config('cart.models.order_item'), 'order_id');
     }
 
     public function customer(): BelongsTo

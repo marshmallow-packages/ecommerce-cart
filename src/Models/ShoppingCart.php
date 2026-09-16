@@ -104,7 +104,7 @@ class ShoppingCart extends Model
             if (! $cart->prospect_id) {
                 $prospect = config('cart.models.prospect')::create([]);
                 $cart->prospect_id = $prospect->id;
-                $cart->customer_id = $prospect->getCustomer()?->id;
+                $cart->customer_id ??= $prospect->getCustomer()?->id;
             }
         });
 
@@ -253,7 +253,7 @@ class ShoppingCart extends Model
         $this->getShippingItem()?->delete();
         $this->unsetRelation('items');
 
-        $method = config('cart.models.shipping_method')::calculateFromCart($this);
+        $method = $this->resolveShippingMethod();
 
         if (! $method) {
             $this->forceFill(['shipping_method_id' => null])->saveQuietly();
@@ -271,6 +271,31 @@ class ShoppingCart extends Model
         $this->addCustom($method->name, $price, CartItemType::Shipping, visibleInCart: false);
 
         event(new ShippingCalculated($this, $method, $price));
+    }
+
+    /**
+     * The method to ship this cart with: the one the customer picked, for as
+     * long as it is still active and its conditions still fit the cart, and
+     * otherwise the default the conditions select. Without this a change to
+     * the contents would silently swap the customer's choice for the default.
+     */
+    protected function resolveShippingMethod(): ?ShippingMethod
+    {
+        $methodModel = config('cart.models.shipping_method');
+
+        if ($this->shipping_method_id && ! $this->hasExcludedShipping()) {
+            /** @var ShippingMethod|null $chosen */
+            $chosen = $methodModel::currentlyActive()
+                ->with('conditions')
+                ->whereKey($this->shipping_method_id)
+                ->first();
+
+            if ($chosen && $chosen->appliesToSubtotal($this->getSubtotal())) {
+                return $chosen;
+            }
+        }
+
+        return $methodModel::calculateFromCart($this);
     }
 
     protected function recalculateDiscount(): void
@@ -375,15 +400,18 @@ class ShoppingCart extends Model
         $this->getShippingItem()?->delete();
         $this->unsetRelation('items');
 
-        if (! $method) {
+        if ($method) {
+            $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
+            $this->addCustom($method->name, $method->priceForCart($this), CartItemType::Shipping, visibleInCart: false);
+            $this->unsetRelation('items');
+        } else {
             $this->forceFill(['shipping_method_id' => null])->saveQuietly();
-
-            return;
         }
 
-        $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
-        $this->addCustom($method->name, $method->priceForCart($this), CartItemType::Shipping, visibleInCart: false);
-        $this->unsetRelation('items');
+        // Shipping lines are derived, so changing one does not trigger the
+        // content-changed pass; a free-shipping code still has to follow the
+        // new shipping amount, or the discount would keep the old cost.
+        $this->recalculateDiscount();
     }
 
     /**
@@ -767,7 +795,7 @@ class ShoppingCart extends Model
 
     public function items(): HasMany
     {
-        return $this->hasMany(config('cart.models.shopping_cart_item'));
+        return $this->hasMany(config('cart.models.shopping_cart_item'), 'shopping_cart_id');
     }
 
     public function prospect(): BelongsTo

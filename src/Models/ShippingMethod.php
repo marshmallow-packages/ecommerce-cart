@@ -136,6 +136,6 @@ class ShippingMethod extends Model
 
     public function conditions(): HasMany
     {
-        return $this->hasMany(config('cart.models.shipping_method_condition'));
+        return $this->hasMany(config('cart.models.shipping_method_condition'), 'shipping_method_id');
     }
 }
