@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Http\Request;
+use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 
@@ -18,34 +19,88 @@ function runMiddleware(Request $request): Request
     return $captured;
 }
 
-it('attaches a cart to the storefront request', function (): void {
-    $request = Request::create('/shop');
+function storefrontRequest(string $uri = '/shop'): Request
+{
+    $request = Request::create($uri);
     $request->setLaravelSession(app('session.store'));
 
-    $passed = runMiddleware($request);
+    return $request;
+}
+
+it('attaches a cart to the storefront request', function (): void {
+    $passed = runMiddleware(storefrontRequest());
 
     expect($passed->attributes->get('cart'))->toBeInstanceOf(ShoppingCart::class);
+});
+
+it('does not persist a cart for a visitor who has none yet', function (): void {
+    $passed = runMiddleware(storefrontRequest());
+
+    expect($passed->attributes->get('cart')->exists)->toBeFalse()
+        ->and(ShoppingCart::count())->toBe(0);
+});
+
+it('attaches the cart the session already holds', function (): void {
+    $cart = ShoppingCart::completelyNew();
+
+    $passed = runMiddleware(storefrontRequest());
+
+    expect($passed->attributes->get('cart')->is($cart))->toBeTrue()
+        ->and(ShoppingCart::count())->toBe(1);
+});
+
+it('exposes the attached cart through the facade', function (): void {
+    $cart = ShoppingCart::completelyNew();
+    $request = storefrontRequest();
+
+    runMiddleware($request);
+    app()->instance('request', $request);
+
+    expect(Cart::getFromRequest()->is($cart))->toBeTrue();
 });
 
 it('replaces a confirmed cart with a fresh one sharing the prospect', function (): void {
     $cart = ShoppingCart::completelyNew();
     $cart->update(['confirmed_at' => now()]);
 
-    $request = Request::create('/shop');
-    $request->setLaravelSession(app('session.store'));
-
-    $passed = runMiddleware($request);
+    $passed = runMiddleware(storefrontRequest());
 
     $attached = $passed->attributes->get('cart');
     expect($attached->is($cart))->toBeFalse()
-        ->and($attached->prospect_id)->toBe($cart->prospect_id);
+        ->and($attached->prospect_id)->toBe($cart->prospect_id)
+        ->and($attached->isOpen())->toBeTrue()
+        ->and(session()->get(ShoppingCart::SESSION_KEY))->toBe($attached->id);
 });
 
 it('does nothing on an excluded path', function (): void {
     config()->set('cart.middleware.excluded_paths', ['admin/*']);
-    $request = Request::create('/admin/orders');
 
-    $passed = runMiddleware($request);
+    $passed = runMiddleware(Request::create('/admin/orders'));
 
     expect($passed->attributes->get('cart'))->toBeNull();
 });
+
+it('matches any of several excluded patterns', function (string $uri, bool $excluded): void {
+    config()->set('cart.middleware.excluded_paths', ['admin/*', 'nova-api/*', 'health']);
+
+    $passed = runMiddleware(storefrontRequest($uri));
+
+    expect($passed->attributes->has('cart'))->toBe(! $excluded);
+})->with([
+    'admin' => ['/admin/orders', true],
+    'nova api' => ['/nova-api/orders', true],
+    'exact health path' => ['/health', true],
+    'storefront' => ['/shop/products', false],
+    'admin-like storefront path' => ['/administration', false],
+]);
+
+it('treats an empty or missing exclusion list as excluding nothing', function (mixed $patterns): void {
+    config()->set('cart.middleware.excluded_paths', $patterns);
+
+    $passed = runMiddleware(storefrontRequest('/admin/orders'));
+
+    expect($passed->attributes->has('cart'))->toBeTrue();
+})->with([
+    'empty' => [[]],
+    'null' => [null],
+]);
