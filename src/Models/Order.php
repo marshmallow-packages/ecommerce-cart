@@ -60,7 +60,16 @@ class Order extends Model
         return DB::transaction(function () use ($cart): Order {
             $orderModel = config('cart.models.order');
 
-            if ($existing = $orderModel::where('shopping_cart_id', $cart->id)->first()) {
+            // Without global scopes on purpose: an application can hide a
+            // not-yet-finalised order behind a scope (a site scope, say), and
+            // missing an existing one here would breach the unique
+            // shopping_cart_id constraint on the second webhook. Carry a
+            // customer back to the still-locked cart with a quiet write.
+            if ($existing = $orderModel::withoutGlobalScopes()->where('shopping_cart_id', $cart->id)->first()) {
+                if ($existing->customer_id && ! $cart->customer_id) {
+                    $cart->forceFill(['customer_id' => $existing->customer_id])->saveQuietly();
+                }
+
                 return $existing;
             }
 
