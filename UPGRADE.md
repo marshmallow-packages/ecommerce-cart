@@ -52,7 +52,10 @@ The backfill runs in chunks and every step is guarded with `Schema::hasColumn`, 
 
 ## 6. Behavioural changes to be aware of
 
-- **Cart authorisation** now uses a random per-session `guard_token` instead of a hashed IP address. Carts created before this release have no token; the middleware simply issues a fresh cart for them, which is safe because carts are ephemeral.
+- **Cart authorisation** now uses a random per-session `guard_token` instead of a hashed IP address. Carts created before this release have no token; `ShoppingCart::getBySession()` (and therefore the middleware) issues a fresh cart for them, which is safe because carts are ephemeral. The upgrade migration signs existing cart lines so they keep combining with new additions.
+- **Soft deletes** are now honoured on every table that carries `deleted_at` (customers, cart lines, shipping methods, discounts, orders, order lines); a `delete()` on these models no longer removes the row.
+- **Order statuses** are guarded (see the README); code that moved orders freely between statuses may now hit `InvalidOrderStatusTransitionException`.
+- **Housekeeping** now hard-deletes expired carts with their lines and orphaned prospects instead of soft-deleting them.
 - **Order conversion** copies the cart's actual shipping method and real discount totals (previously hardcoded), wraps the write in a transaction, and no longer deletes the prospect — it stamps `converted_at` instead.
 - **Login** now merges a guest cart into the user's existing open cart rather than overwriting it.
 - **`Inquiry` / `InquiryItem` were removed.** If you relied on them, keep them in your application.

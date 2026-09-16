@@ -12,7 +12,7 @@ Framework-agnostic e-commerce cart, order and discount engine for Laravel. This 
 - An immutable **`Price`** value object: integer cents, VAT-inclusive canonical, with `net + vat === gross` guaranteed.
 - **Discounts** (fixed amount, percentage, free shipping) with prerequisites, eligibility rules and usage limits.
 - **Shipping methods** the customer picks, priced with a free-over-threshold, plus **fee lines** for payment surcharges.
-- **Orders** created from a paid cart as an immutable financial record, idempotent on the cart id.
+- **Orders** created from a paid cart as an immutable financial record, idempotent on the cart id, with guarded status transitions.
 - A full **event stream**, **stock hooks**, **cart merge on login** and **abandoned-cart housekeeping**.
 
 Requires PHP `^8.3` and Laravel `^12.0 || ^13.0`.
@@ -128,6 +128,8 @@ $cart->getTotalVatAmount();
 $order = $cart->convertToOrder();  // once the cart is paid for — idempotent
 ```
 
+Every line in a cart shares one currency: adding a line in another currency throws `CurrencyMismatchException`, and a cart without product lines cannot become an order (`EmptyCartException`). A shipping method the customer picked stays selected through cart changes for as long as it is still active and its conditions fit the cart.
+
 Discounts stack when every code involved is marked `is_combinable`; a percentage code then compounds over the already-discounted subtotal. A non-combinable code replaces whatever is applied (and vice versa), the same code is refused twice, and every applied code is re-evaluated on each cart change — a code that no longer qualifies drops off.
 
 ### Locking and payment integrity
@@ -148,10 +150,13 @@ $changed = $cart->refreshPrices(); // repriced lines; fires ItemPriceChanged per
 ### After the order
 
 ```php
-$order->markAsRefunded();  // OrderStatus::Refunded + OrderRefunded event
+$order->markAsCompleted();   // OrderStatus::Completed
+$order->markAsRefunded();    // OrderStatus::Refunded + OrderRefunded event (once)
 $cart = $order->toNewCart(); // re-order: fresh cart at current prices,
                              // skipping products that vanished or are out of stock
 ```
+
+Status changes are guarded: a pending order may be canceled, completed or refunded, a completed order may only be refunded, a canceled order may be reopened to pending, and a refund is final. Anything else throws `InvalidOrderStatusTransitionException`; marking the current status again is a no-op. A canceled or refunded order hands its voucher redemptions back, so they no longer count towards a usage limit or a once-per-customer rule.
 
 ### Prices
 
@@ -190,7 +195,7 @@ Hook into the full lifecycle without touching package code:
 | `ItemAdded`, `ItemQuantityChanged`, `ItemRemoved` | product lines change |
 | `DiscountApplied`, `DiscountRejected` | a voucher lands or is refused (with the reason) |
 | `ShippingCalculated` | a shipping method is (re)priced for the cart |
-| `CartMerged` | a guest cart folds into the user's open cart at login |
+| `CartMerged` | a guest cart's product lines fold into the user's open cart at login; the guest cart is soft-deleted with its lines |
 | `CustomerCreated` | a prospect is promoted to a customer |
 | `ItemPriceChanged` | `refreshPrices()` or a tier crossing repriced a line |
 | `OrderCreated` | the paid cart became an order |
@@ -223,7 +228,7 @@ The cart already exposes everything `marshmallow/payable` asks of a payable mode
 
 ### Housekeeping
 
-Schedule the abandoned-cart command to flag quiet carts (firing `CartAbandoned` per cart) and prune the long-expired ones:
+Schedule the abandoned-cart command to flag quiet carts (firing `CartAbandoned` per cart) and permanently prune the long-expired ones, lines and orphaned prospects included. A flagged cart that sees activity again is unflagged. Confirmed carts are never pruned.
 
 ```php
 Schedule::command('ecommerce:clean-carts')->daily();
