@@ -26,6 +26,7 @@ use Marshmallow\Ecommerce\Cart\Events\ItemAdded;
 use Marshmallow\Ecommerce\Cart\Events\ItemPriceChanged;
 use Marshmallow\Ecommerce\Cart\Events\ShippingCalculated;
 use Marshmallow\Ecommerce\Cart\Exceptions\CartLockedException;
+use Marshmallow\Ecommerce\Cart\Exceptions\CurrencyMismatchException;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 use Marshmallow\Ecommerce\Cart\Exceptions\PaymentAmountMismatchException;
 use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
@@ -52,6 +53,7 @@ use Marshmallow\Payable\Traits\PayableWithItems;
  * @property int|null $shipping_method_id
  * @property string|null $note
  * @property Carbon|null $confirmed_at
+ * @property Carbon|null $abandoned_at
  * @property Collection<int, ShoppingCartItem> $items
  * @property-read Prospect|null $prospect
  * @property-read Customer|null $customer
@@ -81,6 +83,7 @@ class ShoppingCart extends Model
     {
         return [
             'confirmed_at' => 'datetime',
+            'abandoned_at' => 'datetime',
         ];
     }
 
@@ -104,7 +107,7 @@ class ShoppingCart extends Model
             if (! $cart->prospect_id) {
                 $prospect = config('cart.models.prospect')::create([]);
                 $cart->prospect_id = $prospect->id;
-                $cart->customer_id = $prospect->getCustomer()?->id;
+                $cart->customer_id ??= $prospect->getCustomer()?->id;
             }
         });
 
@@ -163,6 +166,7 @@ class ShoppingCart extends Model
         $this->assertOpen();
 
         $cart = $this->exists ? $this : static::completelyNew();
+        $cart->assertCurrencyMatches($price->currency);
 
         $attributes = [
             'shopping_cart_id' => $cart->id,
@@ -203,6 +207,18 @@ class ShoppingCart extends Model
     }
 
     /**
+     * Totals are plain sums of cents, so every line has to share one currency.
+     */
+    protected function assertCurrencyMatches(string $currency): void
+    {
+        $other = $this->items()->where('currency', '!=', $currency)->value('currency');
+
+        if (is_string($other)) {
+            throw CurrencyMismatchException::make($other, $currency);
+        }
+    }
+
+    /**
      * Whether the cart may still be changed: a cart confirmed for payment is
      * frozen until `confirmed_at` is cleared again.
      */
@@ -238,6 +254,12 @@ class ShoppingCart extends Model
             return;
         }
 
+        // A change to the contents is activity: a cart flagged as abandoned
+        // is live again, and housekeeping may flag it afresh later.
+        if ($this->abandoned_at) {
+            $this->forceFill(['abandoned_at' => null])->saveQuietly();
+        }
+
         $this->unsetRelation('items');
         $this->calculateShippingCost();
         $this->recalculateDiscount();
@@ -253,7 +275,7 @@ class ShoppingCart extends Model
         $this->getShippingItem()?->delete();
         $this->unsetRelation('items');
 
-        $method = config('cart.models.shipping_method')::calculateFromCart($this);
+        $method = $this->resolveShippingMethod();
 
         if (! $method) {
             $this->forceFill(['shipping_method_id' => null])->saveQuietly();
@@ -271,6 +293,31 @@ class ShoppingCart extends Model
         $this->addCustom($method->name, $price, CartItemType::Shipping, visibleInCart: false);
 
         event(new ShippingCalculated($this, $method, $price));
+    }
+
+    /**
+     * The method to ship this cart with: the one the customer picked, for as
+     * long as it is still active and its conditions still fit the cart, and
+     * otherwise the default the conditions select. Without this a change to
+     * the contents would silently swap the customer's choice for the default.
+     */
+    protected function resolveShippingMethod(): ?ShippingMethod
+    {
+        $methodModel = config('cart.models.shipping_method');
+
+        if ($this->shipping_method_id && ! $this->hasExcludedShipping()) {
+            /** @var ShippingMethod|null $chosen */
+            $chosen = $methodModel::currentlyActive()
+                ->with('conditions')
+                ->whereKey($this->shipping_method_id)
+                ->first();
+
+            if ($chosen && $chosen->appliesToSubtotal($this->getSubtotal())) {
+                return $chosen;
+            }
+        }
+
+        return $methodModel::calculateFromCart($this);
     }
 
     protected function recalculateDiscount(): void
@@ -375,15 +422,18 @@ class ShoppingCart extends Model
         $this->getShippingItem()?->delete();
         $this->unsetRelation('items');
 
-        if (! $method) {
+        if ($method) {
+            $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
+            $this->addCustom($method->name, $method->priceForCart($this), CartItemType::Shipping, visibleInCart: false);
+            $this->unsetRelation('items');
+        } else {
             $this->forceFill(['shipping_method_id' => null])->saveQuietly();
-
-            return;
         }
 
-        $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
-        $this->addCustom($method->name, $method->priceForCart($this), CartItemType::Shipping, visibleInCart: false);
-        $this->unsetRelation('items');
+        // Shipping lines are derived, so changing one does not trigger the
+        // content-changed pass; a free-shipping code still has to follow the
+        // new shipping amount, or the discount would keep the old cost.
+        $this->recalculateDiscount();
     }
 
     /**
@@ -703,7 +753,14 @@ class ShoppingCart extends Model
     {
         $cart = static::find(session()->get(self::SESSION_KEY));
 
-        if ($cart && ! $cart->user && ! $cart->customer && ! $cart->prospect) {
+        if (! $cart) {
+            return null;
+        }
+
+        // A cart from before the guard token existed (the upgrade leaves the
+        // column empty) can never be authorised, and one without any owner is
+        // an orphan: both are replaced by a fresh cart.
+        if (! $cart->guard_token || (! $cart->user && ! $cart->customer && ! $cart->prospect)) {
             return static::completelyNew();
         }
 
@@ -756,7 +813,10 @@ class ShoppingCart extends Model
     {
         $token = session()->get(self::SESSION_TOKEN_KEY);
 
-        return is_string($token) && hash_equals($this->guard_token, $token);
+        return is_string($this->guard_token)
+            && $this->guard_token !== ''
+            && is_string($token)
+            && hash_equals($this->guard_token, $token);
     }
 
     /*
@@ -767,7 +827,7 @@ class ShoppingCart extends Model
 
     public function items(): HasMany
     {
-        return $this->hasMany(config('cart.models.shopping_cart_item'));
+        return $this->hasMany(config('cart.models.shopping_cart_item'), 'shopping_cart_id');
     }
 
     public function prospect(): BelongsTo

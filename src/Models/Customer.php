@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Addressable\Traits\Addressable;
 
 /**
@@ -28,6 +29,7 @@ class Customer extends Model
 {
     use Addressable;
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -38,12 +40,12 @@ class Customer extends Model
 
     public function cart(): HasOne
     {
-        return $this->hasOne(config('cart.models.shopping_cart'));
+        return $this->hasOne(config('cart.models.shopping_cart'), 'customer_id');
     }
 
     public function orders(): HasMany
     {
-        return $this->hasMany(config('cart.models.order'));
+        return $this->hasMany(config('cart.models.order'), 'customer_id');
     }
 
     public function country(): BelongsTo

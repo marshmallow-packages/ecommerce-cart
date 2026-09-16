@@ -6,6 +6,7 @@ namespace Marshmallow\Ecommerce\Cart\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Marshmallow\Ecommerce\Cart\Events\CartAbandoned;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 
@@ -55,13 +56,50 @@ class CleanCartsCommand extends Command
         return $count;
     }
 
+    /**
+     * Permanently remove carts (and their lines) that have been quiet for the
+     * deletion threshold, including carts that were soft-deleted earlier, e.g.
+     * by a merge on login. A confirmed cart is never pruned: an order may
+     * point at it.
+     */
     protected function pruneExpired(): int
     {
         $threshold = now()->subDays((int) config('cart.abandoned.delete_after_days', 90));
+        $itemModel = config('cart.models.shopping_cart_item');
+        $count = 0;
 
-        return $this->openCarts()
+        $this->openCarts()
+            ->withTrashed()
             ->where('updated_at', '<', $threshold)
-            ->delete();
+            ->chunkById(200, function ($carts) use ($itemModel, &$count): void {
+                foreach ($carts as $cart) {
+                    $itemModel::withTrashed()->where('shopping_cart_id', $cart->getKey())->forceDelete();
+                    $cart->forceDelete();
+                    $count++;
+                }
+            });
+
+        $this->pruneOrphanedProspects($threshold);
+
+        return $count;
+    }
+
+    /**
+     * Prospects that were never converted and belong to no cart or customer
+     * any more only exist because their cart did; they go along with it.
+     */
+    protected function pruneOrphanedProspects(Carbon $threshold): int
+    {
+        $prospectModel = config('cart.models.prospect');
+        $cartModel = config('cart.models.shopping_cart');
+        $customerModel = config('cart.models.customer');
+
+        return $prospectModel::withTrashed()
+            ->whereNull('converted_at')
+            ->where('updated_at', '<', $threshold)
+            ->whereNotIn('id', $cartModel::withTrashed()->whereNotNull('prospect_id')->select('prospect_id'))
+            ->whereNotIn('id', $customerModel::withTrashed()->whereNotNull('prospect_id')->select('prospect_id'))
+            ->forceDelete();
     }
 
     /**

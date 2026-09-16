@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Marshmallow\Ecommerce\Cart\Support\Price;
 
@@ -30,6 +31,7 @@ use Marshmallow\Ecommerce\Cart\Support\Price;
 class ShippingMethod extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -136,6 +138,6 @@ class ShippingMethod extends Model
 
     public function conditions(): HasMany
     {
-        return $this->hasMany(config('cart.models.shipping_method_condition'));
+        return $this->hasMany(config('cart.models.shipping_method_condition'), 'shipping_method_id');
     }
 }

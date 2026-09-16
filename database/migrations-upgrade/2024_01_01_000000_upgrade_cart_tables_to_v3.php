@@ -6,6 +6,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 
 /**
  * Bring a v2 cart schema up to the v3 shape.
@@ -30,6 +31,7 @@ return new class extends Migration
     {
         $this->addSnapshotColumns();
         $this->backfillSnapshots();
+        $this->backfillSignatures();
         $this->upgradeCarts();
         $this->dropLegacyColumns();
     }
@@ -92,6 +94,35 @@ return new class extends Migration
                 }
             });
         }
+    }
+
+    /**
+     * Sign legacy cart lines the way new lines are signed, so a product added
+     * again combines with its existing line instead of duplicating it.
+     */
+    private function backfillSignatures(): void
+    {
+        if (! Schema::hasColumn('shopping_cart_items', 'signature')) {
+            return;
+        }
+
+        $itemModel = config('cart.models.shopping_cart_item');
+
+        DB::table('shopping_cart_items')->whereNull('signature')->orderBy('id')->chunkById(500, function ($rows) use ($itemModel): void {
+            foreach ($rows as $row) {
+                $type = CartItemType::tryFrom((string) $row->type);
+
+                if (! $type) {
+                    continue;
+                }
+
+                $meta = is_string($row->meta ?? null) ? json_decode($row->meta, true) : null;
+
+                DB::table('shopping_cart_items')->where('id', $row->id)->update([
+                    'signature' => $itemModel::signatureFor($row->purchasable_id ?? null, $type, is_array($meta) ? $meta : null),
+                ]);
+            }
+        });
     }
 
     private function upgradeCarts(): void

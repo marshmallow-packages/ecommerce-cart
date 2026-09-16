@@ -7,6 +7,7 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Ecommerce\Cart\Concerns\CalculatesItemTotals;
 use Marshmallow\Ecommerce\Cart\Contracts\CartLine;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
@@ -32,6 +33,7 @@ class OrderItem extends Model implements CartLine
 {
     use CalculatesItemTotals;
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 

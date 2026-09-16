@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Marshmallow\Ecommerce\Cart\Contracts\HasPurchasableCategories;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
@@ -14,6 +16,7 @@ use Marshmallow\Ecommerce\Cart\Enums\DiscountAppliesTo;
 use Marshmallow\Ecommerce\Cart\Enums\DiscountEligibility;
 use Marshmallow\Ecommerce\Cart\Enums\DiscountPrerequisite;
 use Marshmallow\Ecommerce\Cart\Enums\DiscountType;
+use Marshmallow\Ecommerce\Cart\Enums\OrderStatus;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 use Marshmallow\Ecommerce\Cart\Support\Price;
 
@@ -46,6 +49,7 @@ use Marshmallow\Ecommerce\Cart\Support\Price;
 class Discount extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -190,31 +194,18 @@ class Discount extends Model
 
     protected function assertUsageWithinLimits(ShoppingCart $cart): void
     {
-        $orderItemModel = config('cart.models.order_item');
-
-        if ($this->total_usage_limit) {
-            $used = $orderItemModel::query()
-                ->where('type', CartItemType::Discount)
-                ->where('description', $this->discount_code)
-                ->count();
-
-            if ($used >= $this->total_usage_limit) {
-                throw new DiscountException(__('This voucher is at its full capacity. It looks like you are a little too late.'));
-            }
+        if ($this->total_usage_limit && $this->redemptions()->count() >= $this->total_usage_limit) {
+            throw new DiscountException(__('This voucher is at its full capacity. It looks like you are a little too late.'));
         }
 
         if ($this->is_once_per_customer && ($email = $cart->getCustomerEmail())) {
             $orderTable = (new (config('cart.models.order'))())->getTable();
-            $customerTable = (new Customer)->getTable();
+            $customerTable = (new (config('cart.models.customer'))())->getTable();
             $userTable = (new (config('cart.models.user'))())->getTable();
-            $orderItemTable = (new $orderItemModel)->getTable();
 
-            $count = $orderItemModel::query()
-                ->join($orderTable, "{$orderItemTable}.order_id", '=', "{$orderTable}.id")
+            $count = $this->redemptions()
                 ->leftJoin($customerTable, "{$orderTable}.customer_id", '=', "{$customerTable}.id")
                 ->leftJoin($userTable, "{$orderTable}.user_id", '=', "{$userTable}.id")
-                ->where("{$orderItemTable}.type", CartItemType::Discount->value)
-                ->where("{$orderItemTable}.description", $this->discount_code)
                 ->where(fn ($query) => $query
                     ->where("{$customerTable}.email", $email)
                     ->orWhere("{$userTable}.email", $email))
@@ -226,9 +217,36 @@ class Discount extends Model
         }
     }
 
+    /**
+     * The order lines that redeemed this code on an order that still stands.
+     * A canceled or refunded order hands its redemption back, so it neither
+     * counts towards the usage limit nor blocks the customer from retrying.
+     *
+     * @return Builder<OrderItem>
+     */
+    protected function redemptions(): Builder
+    {
+        $orderItemModel = config('cart.models.order_item');
+        $orderTable = (new (config('cart.models.order'))())->getTable();
+        $orderItemTable = (new $orderItemModel)->getTable();
+
+        return $orderItemModel::query()
+            ->join($orderTable, "{$orderItemTable}.order_id", '=', "{$orderTable}.id")
+            ->where("{$orderItemTable}.type", CartItemType::Discount->value)
+            ->where("{$orderItemTable}.description", $this->discount_code)
+            ->whereNull("{$orderTable}.deleted_at")
+            ->whereNotIn("{$orderTable}.status", [OrderStatus::Canceled->value, OrderStatus::Refunded->value]);
+    }
+
+    /**
+     * A fixed amount never takes more than the eligible lines are worth, so a
+     * code scoped to one product cannot eat into the rest of the cart.
+     */
     protected function fixedAmountDiscount(ShoppingCart $cart): int
     {
-        return min((int) $this->fixed_amount, $cart->getSubtotal());
+        $eligible = (int) $this->eligibleItems($cart)->sum(fn (ShoppingCartItem $item): int => $item->getTotalAmount());
+
+        return min((int) $this->fixed_amount, $eligible);
     }
 
     /**

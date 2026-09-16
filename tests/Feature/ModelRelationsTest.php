@@ -8,6 +8,7 @@ use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Enums\DiscountAppliesTo;
 use Marshmallow\Ecommerce\Cart\Events\ItemRemoved;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
+use Marshmallow\Ecommerce\Cart\Exceptions\EmptyCartException;
 use Marshmallow\Ecommerce\Cart\Models\Customer;
 use Marshmallow\Ecommerce\Cart\Models\Discount;
 use Marshmallow\Ecommerce\Cart\Models\Order;
@@ -97,14 +98,14 @@ it('exposes order and order item relations', function (): void {
         ->and($order->items->first()->purchasable)->toBeInstanceOf(Product::class);
 });
 
-it('falls back to the config currency for an order with no items', function (): void {
+it('refuses to turn a cart without products into an order', function (): void {
     $cart = ShoppingCart::completelyNew();
     $cart->prospect->update(['email' => 'empty@example.com']);
+    $cart->fresh()->setFee('Toeslag', Price::fromGross(150, 21));
 
-    $order = $cart->fresh()->convertToOrder();
-
-    expect($order->currency)->toBe('EUR')
-        ->and($order->total_including_vat)->toBe(0);
+    expect(fn () => $cart->fresh()->convertToOrder())->toThrow(EmptyCartException::class)
+        ->and(Order::count())->toBe(0)
+        ->and($cart->fresh()->prospect->converted_at)->toBeNull();
 });
 
 it('does not re-stamp an already converted prospect', function (): void {
