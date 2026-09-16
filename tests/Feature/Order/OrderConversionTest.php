@@ -158,15 +158,15 @@ it('copies order item snapshots including type', function (): void {
 it('transitions through order statuses', function (): void {
     $order = paidCart()->convertToOrder();
 
-    $order->markAsCompleted();
-    expect($order->isCompleted())->toBeTrue();
-
     $order->markAsCanceled();
     expect($order->isCanceled())->toBeTrue();
 
     $order->markAsPending();
-    expect($order->isPending())->toBeTrue()
-        ->and(Order::pending()->count())->toBe(1)
-        ->and(Order::completed()->count())->toBe(0)
+    expect($order->isPending())->toBeTrue();
+
+    $order->markAsCompleted();
+    expect($order->isCompleted())->toBeTrue()
+        ->and(Order::completed()->count())->toBe(1)
+        ->and(Order::pending()->count())->toBe(0)
         ->and(Order::canceled()->count())->toBe(0);
 });

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 use Marshmallow\Ecommerce\Cart\Models\Discount;
+use Marshmallow\Ecommerce\Cart\Models\Order;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 use Workbench\App\Models\User;
 
@@ -88,6 +89,39 @@ it('allows a once-per-customer discount for a different e-mail', function (): vo
     $cart->fresh()->applyDiscount($discount->fresh());
 
     expect($cart->fresh()->getDiscountAmount())->toBe(-100);
+});
+
+it('hands a redemption back when the order is canceled or refunded', function (string $mark): void {
+    $discount = Discount::factory()->create(['discount_code' => 'ONCE', 'total_usage_limit' => 1, 'fixed_amount' => 100]);
+    redeem($discount, 'a@example.com');
+    Order::query()->sole()->{$mark}();
+
+    $cart = cartOf([[10000, 1, 21.0]]);
+    $cart->applyDiscount($discount->fresh());
+
+    expect($cart->fresh()->getDiscountAmount())->toBe(-100);
+})->with(['canceled' => 'markAsCanceled', 'refunded' => 'markAsRefunded']);
+
+it('lets a customer retry a once-per-customer code after a refund', function (): void {
+    $discount = Discount::factory()->create(['discount_code' => 'SOLO', 'is_once_per_customer' => true, 'fixed_amount' => 100]);
+    redeem($discount, 'repeat@example.com');
+    Order::query()->sole()->markAsRefunded();
+
+    $cart = cartOf([[10000, 1, 21.0]]);
+    $cart->prospect->update(['email' => 'repeat@example.com']);
+    $cart->fresh()->applyDiscount($discount->fresh());
+
+    expect($cart->fresh()->getDiscountAmount())->toBe(-100);
+});
+
+it('still counts a completed order as a redemption', function (): void {
+    $discount = Discount::factory()->create(['discount_code' => 'ONCE', 'total_usage_limit' => 1, 'fixed_amount' => 100]);
+    redeem($discount, 'a@example.com');
+    Order::query()->sole()->markAsCompleted();
+
+    $cart = cartOf([[10000, 1, 21.0]]);
+
+    expect(fn () => $cart->applyDiscount($discount->fresh()))->toThrow(DiscountException::class, 'full capacity');
 });
 
 it('re-checks usage limits when the cart changes, dropping a code that filled up', function (): void {

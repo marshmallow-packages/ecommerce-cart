@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Event;
 use Marshmallow\Ecommerce\Cart\Events\CartAbandoned;
+use Marshmallow\Ecommerce\Cart\Models\Customer;
+use Marshmallow\Ecommerce\Cart\Models\Prospect;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem;
 
 function quietCart(int $daysAgo, array $attributes = []): ShoppingCart
 {
@@ -55,15 +58,69 @@ it('skips abandonment events when disabled but still prunes', function (): void 
 
     Event::assertNotDispatched(CartAbandoned::class);
     expect($quiet->fresh()->abandoned_at)->toBeNull()
-        ->and($expired->fresh()->trashed())->toBeTrue();
+        ->and(ShoppingCart::withTrashed()->find($expired->id))->toBeNull();
 });
 
-it('prunes carts older than the delete threshold', function (): void {
+it('prunes carts older than the delete threshold for good, lines included', function (): void {
     $cart = quietCart(120);
+    $cart->add(productPriced(1000), 1);
+    $cart->forceFill(['updated_at' => now()->subDays(120)])->saveQuietly();
+    $cart->prospect->forceFill(['updated_at' => now()->subDays(120)])->saveQuietly();
+    $prospectId = $cart->prospect_id;
 
     $this->artisan('ecommerce:clean-carts')->assertSuccessful();
 
-    expect(ShoppingCart::withTrashed()->find($cart->id)->trashed())->toBeTrue();
+    expect(ShoppingCart::withTrashed()->find($cart->id))->toBeNull()
+        ->and(ShoppingCartItem::withTrashed()->where('shopping_cart_id', $cart->id)->count())->toBe(0)
+        ->and(Prospect::withTrashed()->find($prospectId))->toBeNull();
+});
+
+it('prunes a cart that was soft-deleted earlier once it is old enough', function (): void {
+    $merged = quietCart(120);
+    $merged->delete();
+    $merged->forceFill(['updated_at' => now()->subDays(120)])->saveQuietly();
+
+    $this->artisan('ecommerce:clean-carts')
+        ->expectsOutputToContain('pruned 1 expired cart(s)')
+        ->assertSuccessful();
+
+    expect(ShoppingCart::withTrashed()->find($merged->id))->toBeNull();
+});
+
+it('keeps a prospect that was converted or still has a cart or customer', function (): void {
+    $converted = quietCart(120);
+    $converted->prospect->forceFill(['converted_at' => now()->subDays(120), 'updated_at' => now()->subDays(120)])->saveQuietly();
+
+    $shared = quietCart(120);
+    $live = ShoppingCart::newWithSameProspect($shared);
+
+    $withCustomer = quietCart(120);
+    Customer::factory()->create(['prospect_id' => $withCustomer->prospect_id]);
+    $withCustomer->prospect->forceFill(['updated_at' => now()->subDays(120)])->saveQuietly();
+
+    $this->artisan('ecommerce:clean-carts')->assertSuccessful();
+
+    expect(Prospect::find($converted->prospect_id))->not->toBeNull()
+        ->and(Prospect::find($shared->prospect_id))->not->toBeNull()
+        ->and($live->fresh())->not->toBeNull()
+        ->and(Prospect::find($withCustomer->prospect_id))->not->toBeNull();
+});
+
+it('unflags an abandoned cart as soon as it sees activity', function (): void {
+    $cart = quietCart(40);
+    $this->artisan('ecommerce:clean-carts')->assertSuccessful();
+    expect($cart->fresh()->abandoned_at)->not->toBeNull();
+
+    $cart->fresh()->add(productPriced(1000), 1);
+
+    expect($cart->fresh()->abandoned_at)->toBeNull();
+
+    // Quiet again for long enough, it is flagged afresh.
+    Event::fake([CartAbandoned::class]);
+    $cart->fresh()->forceFill(['updated_at' => now()->subDays(40)])->saveQuietly();
+    $this->artisan('ecommerce:clean-carts')->assertSuccessful();
+
+    Event::assertDispatched(CartAbandoned::class);
 });
 
 it('leaves a recent cart untouched', function (): void {
@@ -98,8 +155,8 @@ it('treats the thresholds as strictly older than', function (): void {
 
     expect($onExpiry->fresh()->abandoned_at)->toBeNull()
         ->and($pastExpiry->fresh()->abandoned_at)->not->toBeNull()
-        ->and($onDeletion->fresh()->trashed())->toBeFalse()
-        ->and($pastDeletion->fresh()->trashed())->toBeTrue();
+        ->and($onDeletion->fresh())->not->toBeNull()
+        ->and(ShoppingCart::withTrashed()->find($pastDeletion->id))->toBeNull();
 });
 
 it('honours custom thresholds from config', function (): void {
@@ -111,8 +168,7 @@ it('honours custom thresholds from config', function (): void {
     $this->artisan('ecommerce:clean-carts')->assertSuccessful();
 
     expect($week->fresh()->abandoned_at)->not->toBeNull()
-        ->and($week->fresh()->trashed())->toBeFalse()
-        ->and($fortnight->fresh()->trashed())->toBeTrue();
+        ->and(ShoppingCart::withTrashed()->find($fortnight->id))->toBeNull();
 });
 
 it('does not count flagging as activity, so the cart is pruned later', function (): void {
@@ -125,14 +181,16 @@ it('does not count flagging as activity, so the cart is pruned later', function 
     $this->travel(60)->days();
     $this->artisan('ecommerce:clean-carts')->assertSuccessful();
 
-    expect(ShoppingCart::withTrashed()->find($cart->id)->trashed())->toBeTrue();
+    expect(ShoppingCart::withTrashed()->find($cart->id))->toBeNull();
 });
 
-it('leaves an already pruned cart alone', function (): void {
-    $cart = quietCart(120);
+it('leaves a recently soft-deleted cart alone', function (): void {
+    $cart = ShoppingCart::completelyNew();
     $cart->delete();
 
     $this->artisan('ecommerce:clean-carts')
         ->expectsOutputToContain('pruned 0 expired cart(s)')
         ->assertSuccessful();
+
+    expect(ShoppingCart::withTrashed()->find($cart->id))->not->toBeNull();
 });

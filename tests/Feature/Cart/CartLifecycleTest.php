@@ -120,6 +120,31 @@ it('refuses a tampered guard token', function (): void {
     expect($cart->authorized())->toBeFalse();
 });
 
+it('never authorises a cart without a guard token', function (): void {
+    $legacy = new ShoppingCart;
+    session()->put(ShoppingCart::SESSION_TOKEN_KEY, '');
+
+    expect($legacy->authorized())->toBeFalse();
+
+    $cart = ShoppingCart::completelyNew();
+    $cart->forceFill(['guard_token' => ''])->saveQuietly();
+    session()->put(ShoppingCart::SESSION_TOKEN_KEY, '');
+
+    expect($cart->fresh()->authorized())->toBeFalse();
+});
+
+it('replaces a cart from before guard tokens existed with a fresh one', function (): void {
+    // The upgrade migration leaves guard_token empty on carts it converts.
+    $legacy = ShoppingCart::completelyNew();
+    $legacy->forceFill(['guard_token' => ''])->saveQuietly();
+
+    $resolved = ShoppingCart::getBySession();
+
+    expect($resolved->is($legacy))->toBeFalse()
+        ->and($resolved->guard_token)->toHaveLength(64)
+        ->and(session()->get(ShoppingCart::SESSION_KEY))->toBe($resolved->id);
+});
+
 it('authorises a session that holds the token of an older cart', function (): void {
     $old = ShoppingCart::completelyNew();
     ShoppingCart::completelyNew();

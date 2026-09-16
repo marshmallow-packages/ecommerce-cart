@@ -6,6 +6,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
+use Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem;
 
 /**
  * Rebuild the tables the upgrade touches in their Nova-era (v2) shape, with
@@ -138,6 +140,27 @@ it('backfills the snapshots from the priceable lookup tables', function (): void
         ->and((float) $orderLine->vat_percentage)->toBe(21.0)
         ->and($orderLine->currency)->toBe('EUR')
         ->and((string) $orderLine->purchasable_id)->toBe('42');
+});
+
+it('signs legacy lines exactly like new lines', function (): void {
+    runUpgrade();
+
+    $book = DB::table('shopping_cart_items')->where('description', 'Boek')->first();
+    $shipping = DB::table('shopping_cart_items')->where('description', 'PostNL')->first();
+
+    expect($book->signature)->toBe(ShoppingCartItem::signatureFor('42', CartItemType::Product, null))
+        ->and($book->signature)->toBe((new ShoppingCartItem(['purchasable_id' => 42, 'type' => CartItemType::Product]))->buildSignature())
+        ->and($shipping->signature)->toBe(ShoppingCartItem::signatureFor(null, CartItemType::Shipping, null))
+        ->and(DB::table('shopping_cart_items')->whereNull('signature')->count())->toBe(0);
+});
+
+it('leaves a line with an unknown legacy type unsigned rather than failing', function (): void {
+    DB::table('shopping_cart_items')->insert(['shopping_cart_id' => 'cart-1', 'description' => 'Raar', 'type' => 'LEGACY_TYPE', 'price_including_vat' => 1]);
+
+    runUpgrade();
+
+    expect(DB::table('shopping_cart_items')->where('description', 'Raar')->value('signature'))->toBeNull()
+        ->and(DB::table('shopping_cart_items')->where('description', 'Boek')->value('signature'))->not->toBeNull();
 });
 
 it('honours the configured defaults for rows without a rate or currency', function (): void {

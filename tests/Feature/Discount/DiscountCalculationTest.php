@@ -37,6 +37,22 @@ it('takes a scoped percentage over the eligible lines only', function (): void {
         ->and($cart->fresh()->getTotalAmount())->toBe(68000);
 });
 
+it('caps a scoped fixed amount at what the eligible lines are worth', function (): void {
+    $eligible = productPriced(1000);
+    $cart = ShoppingCart::completelyNew();
+    $cart->add($eligible, 1);
+    $cart->add(productPriced(10000), 1);
+
+    $cart->fresh()->applyDiscount(Discount::factory()->create([
+        'applies_to' => DiscountAppliesTo::Products,
+        'applies_to_products' => [$eligible->id],
+        'fixed_amount' => 5000,
+    ]));
+
+    expect($cart->fresh()->getDiscountAmount())->toBe(-1000)
+        ->and($cart->fresh()->getTotalAmount())->toBe(10000);
+});
+
 it('matches integer product ids against the string purchasable column', function (): void {
     $product = productPriced(10000);
     $cart = cartOf([]);
