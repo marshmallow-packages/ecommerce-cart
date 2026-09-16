@@ -26,6 +26,7 @@ return new class extends Migration
             $table->decimal('vat_percentage', 5, 2)->default(21);
             $table->integer('stock')->default(100);
             $table->json('category_ids')->nullable();
+            $table->json('price_tiers')->nullable();
             $table->timestamps();
         });
     }

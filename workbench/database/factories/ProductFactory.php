@@ -32,4 +32,12 @@ class ProductFactory extends Factory
     {
         return $this->state(['stock' => 0]);
     }
+
+    /**
+     * @param  array<string, int>  $tiers  minimum quantity => unit price in cents
+     */
+    public function tiered(array $tiers): static
+    {
+        return $this->state(['price_tiers' => $tiers]);
+    }
 }

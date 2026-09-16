@@ -14,6 +14,7 @@ use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Events\ItemQuantityChanged;
 use Marshmallow\Ecommerce\Cart\Events\ItemRemoved;
+use Marshmallow\Ecommerce\Cart\Support\Price;
 
 /**
  * A single line in a shopping cart.
@@ -31,6 +32,7 @@ use Marshmallow\Ecommerce\Cart\Events\ItemRemoved;
  * @property array<string, mixed>|null $meta
  * @property string $signature
  * @property bool $visible_in_cart
+ * @property bool $custom_price
  * @property-read ShoppingCart|null $cart
  */
 class ShoppingCartItem extends Model implements CartLine
@@ -54,13 +56,22 @@ class ShoppingCartItem extends Model implements CartLine
             'vat_amount' => 'integer',
             'vat_percentage' => 'float',
             'visible_in_cart' => 'boolean',
+            'custom_price' => 'boolean',
         ];
     }
 
     protected static function booted(): void
     {
         static::saving(function (ShoppingCartItem $item): void {
+            // A confirmed cart is frozen down to its lines: the customer is at
+            // the payment provider and the amounts may no longer move.
+            $item->cart?->assertOpen();
+
             $item->signature = $item->buildSignature();
+        });
+
+        static::deleting(function (ShoppingCartItem $item): void {
+            $item->cart?->assertOpen();
         });
 
         static::created(function (ShoppingCartItem $item): void {
@@ -153,6 +164,22 @@ class ShoppingCartItem extends Model implements CartLine
         return $purchasable instanceof Purchasable ? $purchasable : null;
     }
 
+    /**
+     * Overwrite this line's price snapshot with a new unit price.
+     */
+    public function applyPrice(Price $price): self
+    {
+        $this->update([
+            'price_excluding_vat' => $price->amountExcludingVat,
+            'price_including_vat' => $price->amountIncludingVat,
+            'vat_amount' => $price->vatAmount(),
+            'vat_percentage' => $price->vatPercentage,
+            'currency' => $price->currency,
+        ]);
+
+        return $this;
+    }
+
     private function changeQuantity(int $quantity): self
     {
         $from = $this->quantity;
@@ -160,9 +187,33 @@ class ShoppingCartItem extends Model implements CartLine
         $this->update(['quantity' => $quantity]);
 
         if ($from !== $quantity) {
+            $this->repriceForQuantity($quantity);
             event(new ItemQuantityChanged($this->cart, $this, $from, $quantity));
         }
 
         return $this;
+    }
+
+    /**
+     * A purchasable-priced line follows the purchasable's tier for its new
+     * quantity; a line whose price was chosen by the caller keeps it.
+     */
+    private function repriceForQuantity(int $quantity): void
+    {
+        if ($this->custom_price) {
+            return;
+        }
+
+        $purchasable = $this->resolvePurchasable();
+
+        if (! $purchasable) {
+            return;
+        }
+
+        $price = $purchasable->getPurchasablePrice($quantity);
+
+        if (! $price->equals($this->price())) {
+            $this->applyPrice($price);
+        }
     }
 }

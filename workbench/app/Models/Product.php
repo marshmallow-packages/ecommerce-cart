@@ -21,6 +21,7 @@ use Marshmallow\Ecommerce\Cart\Support\Price;
  * @property float $vat_percentage
  * @property int $stock
  * @property array<int, int>|null $category_ids
+ * @property array<string, int>|null $price_tiers
  */
 class Product extends Model implements HasPurchasableCategories, Purchasable
 {
@@ -38,6 +39,7 @@ class Product extends Model implements HasPurchasableCategories, Purchasable
             'vat_percentage' => 'float',
             'stock' => 'integer',
             'category_ids' => 'array',
+            'price_tiers' => 'array',
         ];
     }
 
@@ -51,9 +53,19 @@ class Product extends Model implements HasPurchasableCategories, Purchasable
         return $this->name;
     }
 
-    public function getPurchasablePrice(): Price
+    public function getPurchasablePrice(int $quantity = 1): Price
     {
-        return Price::fromGross($this->price_cents, $this->vat_percentage, 'EUR');
+        $cents = $this->price_cents;
+
+        // Tiers map a minimum quantity to a unit price in cents; the highest
+        // tier the quantity reaches wins.
+        foreach ($this->price_tiers ?? [] as $minimum => $unitCents) {
+            if ($quantity >= (int) $minimum) {
+                $cents = (int) $unitCents;
+            }
+        }
+
+        return Price::fromGross($cents, $this->vat_percentage, 'EUR');
     }
 
     public function isAvailableForPurchase(int $quantity, ?ShoppingCart $cart = null): bool

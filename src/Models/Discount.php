@@ -35,6 +35,7 @@ use Marshmallow\Ecommerce\Cart\Support\Price;
  * @property array<int, string>|null $eligible_for_emails
  * @property array<int, int|string>|null $eligible_for_customers
  * @property bool $is_active
+ * @property bool $is_combinable
  * @property bool $is_once_per_customer
  * @property int|null $total_usage_limit
  * @property int|null $fixed_amount
@@ -65,6 +66,7 @@ class Discount extends Model
             'eligible_for_emails' => 'array',
             'eligible_for_customers' => 'array',
             'is_active' => 'boolean',
+            'is_combinable' => 'boolean',
             'is_once_per_customer' => 'boolean',
             'total_usage_limit' => 'integer',
             'fixed_amount' => 'integer',
@@ -115,8 +117,10 @@ class Discount extends Model
             DiscountType::FreeShipping => $cart->getShippingAmount(),
         };
 
-        $cartTotal = $cart->getSubtotal();
-        $amount = min(abs($amount), $cartTotal);
+        // Stacked codes may never push the products below zero: the cap is the
+        // subtotal minus what earlier codes already took off.
+        $remaining = max(0, $cart->getSubtotal() + $cart->getDiscountAmount());
+        $amount = min(abs($amount), $remaining);
 
         return Price::fromGross($amount, $this->vatPercentageFor($cart), $this->currencyFor($cart))->negate();
     }
@@ -227,9 +231,15 @@ class Discount extends Model
         return min((int) $this->fixed_amount, $cart->getSubtotal());
     }
 
+    /**
+     * A percentage works on what the eligible items still cost after the codes
+     * already on the cart, so stacked percentages compound in the order they
+     * were added rather than each taking a slice of the original subtotal.
+     */
     protected function percentageDiscount(ShoppingCart $cart): int
     {
         $total = (int) $this->eligibleItems($cart)->sum(fn (ShoppingCartItem $item): int => $item->getTotalAmount());
+        $total = max(0, $total + $cart->getDiscountAmount());
 
         return (int) round($total * (float) $this->percentage_amount / 100);
     }

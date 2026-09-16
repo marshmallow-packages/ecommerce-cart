@@ -69,6 +69,7 @@ return new class extends Migration
             $table->json('meta')->nullable();
             $table->string('signature')->index();
             $table->boolean('visible_in_cart')->default(true);
+            $table->boolean('custom_price')->default(true);
             $table->timestamps();
             $table->softDeletes();
 
@@ -114,6 +115,7 @@ return new class extends Migration
             $table->json('eligible_for_emails')->nullable();
             $table->json('eligible_for_customers')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->boolean('is_combinable')->default(false);
             $table->boolean('is_once_per_customer')->default(false);
             $table->unsignedInteger('total_usage_limit')->nullable();
             $table->integer('fixed_amount')->nullable();

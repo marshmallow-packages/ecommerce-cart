@@ -93,7 +93,7 @@ class Product extends Model implements Purchasable
         return $this->name;
     }
 
-    public function getPurchasablePrice(): Price
+    public function getPurchasablePrice(int $quantity = 1): Price
     {
         return Price::fromGross($this->price_cents, 21.0, 'EUR');
     }
@@ -107,6 +107,8 @@ class Product extends Model implements Purchasable
 
 Implement `HasPurchasableCategories` as well when you want discounts scoped to categories.
 
+The `$quantity` on `getPurchasablePrice()` is your tiered-pricing hook: return a different unit price for larger quantities and the cart follows it automatically — on add, and again whenever a line's quantity crosses a tier. Lines added with a caller-chosen price (`addCustom()`) are never repriced.
+
 ### Work with the cart
 
 ```php
@@ -117,13 +119,38 @@ $cart->add($product, quantity: 2);
 $cart->add($product, quantity: 1, meta: ['size' => 'L']); // meta makes it a separate line
 
 $cart->applyDiscount($discount);   // throws DiscountException when not allowed
-$cart->removeDiscount();
+$cart->removeDiscount('CODE');     // one code; no argument clears them all
 
 $cart->getSubtotal();              // product lines, gross cents
 $cart->getTotalAmount();           // grand total incl. shipping, discount and fees
 $cart->getTotalVatAmount();
 
 $order = $cart->convertToOrder();  // once the cart is paid for — idempotent
+```
+
+Discounts stack when every code involved is marked `is_combinable`; a percentage code then compounds over the already-discounted subtotal. A non-combinable code replaces whatever is applied (and vice versa), the same code is refused twice, and every applied code is re-evaluated on each cart change — a code that no longer qualifies drops off.
+
+### Locking and payment integrity
+
+Freeze the cart the moment the customer leaves for the payment provider by setting `confirmed_at`. Every mutation on a confirmed cart — adding, quantity changes, deleting lines, fees, shipping — throws `CartLockedException`; clear `confirmed_at` to reopen it after a failed payment. When the provider reports back, pass the amount that was actually paid so a tampered or stale cart can never become an order for the wrong total:
+
+```php
+$order = $cart->convertToOrder(expectedTotalAmount: $payment->total_amount);
+// throws PaymentAmountMismatchException on a single cent of difference
+```
+
+An open cart can also re-ask every purchasable for its current price — for example when a customer returns to a cart that sat overnight:
+
+```php
+$changed = $cart->refreshPrices(); // repriced lines; fires ItemPriceChanged per line
+```
+
+### After the order
+
+```php
+$order->markAsRefunded();  // OrderStatus::Refunded + OrderRefunded event
+$cart = $order->toNewCart(); // re-order: fresh cart at current prices,
+                             // skipping products that vanished or are out of stock
 ```
 
 ### Prices
@@ -165,7 +192,9 @@ Hook into the full lifecycle without touching package code:
 | `ShippingCalculated` | a shipping method is (re)priced for the cart |
 | `CartMerged` | a guest cart folds into the user's open cart at login |
 | `CustomerCreated` | a prospect is promoted to a customer |
+| `ItemPriceChanged` | `refreshPrices()` or a tier crossing repriced a line |
 | `OrderCreated` | the paid cart became an order |
+| `OrderRefunded` | an order was marked as refunded |
 | `CartAbandoned` | housekeeping flags a quiet cart |
 
 ### Extend the models
@@ -190,7 +219,7 @@ class ShoppingCart extends \Marshmallow\Ecommerce\Cart\Models\ShoppingCart
 }
 ```
 
-The cart already exposes everything `marshmallow/payable` asks of a payable model (`getTotalAmount()`, `getPayableDescription()`, the customer getters), so payment is one trait away.
+The cart already exposes everything `marshmallow/payable` asks of a payable model (`getTotalAmount()`, `getPayableDescription()`, the customer getters), so payment is one trait away. It also implements `getPayableSnapshot()`, which payable freezes onto the payment when it starts — proof of what the settled amount covered, independent of what happens to the cart afterwards.
 
 ### Housekeeping
 

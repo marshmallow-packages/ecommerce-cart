@@ -66,6 +66,12 @@ return new class extends Migration
                     $t->string('signature')->nullable()->index();
                 });
             }
+
+            if ($table === 'shopping_cart_items' && ! Schema::hasColumn($table, 'custom_price')) {
+                Schema::table($table, function (Blueprint $t): void {
+                    $t->boolean('custom_price')->default(true);
+                });
+            }
         }
     }
 
@@ -90,6 +96,12 @@ return new class extends Migration
 
     private function upgradeCarts(): void
     {
+        if (Schema::hasTable('discounts') && ! Schema::hasColumn('discounts', 'is_combinable')) {
+            Schema::table('discounts', function (Blueprint $t): void {
+                $t->boolean('is_combinable')->default(false);
+            });
+        }
+
         if (Schema::hasTable('shopping_carts') && ! Schema::hasColumn('shopping_carts', 'guard_token')) {
             Schema::table('shopping_carts', function (Blueprint $t): void {
                 $t->string('guard_token', 64)->nullable();

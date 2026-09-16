@@ -82,6 +82,43 @@ it('is idempotent on the cart id', function (): void {
         ->and(Order::count())->toBe(1);
 });
 
+it('backfills the cart customer from the existing order on a repeat conversion', function (): void {
+    $cart = paidCart();
+    $order = $cart->convertToOrder();
+    // The cart lost its customer (e.g. a scope hid it), but the order kept one.
+    $cart->forceFill(['customer_id' => null])->saveQuietly();
+
+    $again = $cart->fresh()->convertToOrder();
+
+    expect($again->id)->toBe($order->id)
+        ->and($order->customer_id)->not->toBeNull()
+        ->and($cart->fresh()->customer_id)->toBe($order->customer_id);
+});
+
+it('fires OrderCreated only for the cart it actually converted', function (): void {
+    $cart = paidCart();
+    $cart->convertToOrder();
+
+    Event::fake([OrderCreated::class]);
+    $cart->fresh()->convertToOrder();
+
+    // A second webhook must not mail a second confirmation.
+    Event::assertNotDispatched(OrderCreated::class);
+});
+
+it('keeps the order when an OrderCreated listener fails', function (): void {
+    // The confirmation mail is queued from this event: an unreachable queue
+    // must never roll back an order the customer already paid for.
+    Event::listen(OrderCreated::class, function (): void {
+        throw new RuntimeException('queue unreachable');
+    });
+
+    $cart = paidCart();
+
+    expect(fn () => $cart->convertToOrder())->toThrow(RuntimeException::class)
+        ->and(Order::where('shopping_cart_id', $cart->id)->count())->toBe(1);
+});
+
 it('reuses the cart customer when one is already set', function (): void {
     $customer = Customer::factory()->create();
     $cart = paidCart();

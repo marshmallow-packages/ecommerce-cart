@@ -23,8 +23,11 @@ use Marshmallow\Ecommerce\Cart\Events\CartCreated;
 use Marshmallow\Ecommerce\Cart\Events\DiscountApplied;
 use Marshmallow\Ecommerce\Cart\Events\DiscountRejected;
 use Marshmallow\Ecommerce\Cart\Events\ItemAdded;
+use Marshmallow\Ecommerce\Cart\Events\ItemPriceChanged;
 use Marshmallow\Ecommerce\Cart\Events\ShippingCalculated;
+use Marshmallow\Ecommerce\Cart\Exceptions\CartLockedException;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
+use Marshmallow\Ecommerce\Cart\Exceptions\PaymentAmountMismatchException;
 use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Support\Price;
@@ -127,16 +130,22 @@ class ShoppingCart extends Model
 
         return $this->addCustom(
             description: $purchasable->getPurchasableName(),
-            price: $purchasable->getPurchasablePrice(),
+            price: $purchasable->getPurchasablePrice($quantity),
             type: CartItemType::Product,
             quantity: $quantity,
             purchasable: $purchasable,
             meta: $meta,
+            customPrice: false,
         );
     }
 
     /**
      * Add an arbitrary line to the cart, snapshotting the given price.
+     *
+     * A line added here carries a price the caller chose (an option surcharge,
+     * a fee), so quantity changes never re-ask the purchasable for it; a line
+     * added through {@see add()} follows the purchasable's own (possibly
+     * tiered) pricing instead.
      *
      * @param  array<string, mixed>|null  $meta
      */
@@ -149,7 +158,10 @@ class ShoppingCart extends Model
         ?Purchasable $purchasable = null,
         ?array $meta = null,
         bool $combine = true,
+        bool $customPrice = true,
     ): ShoppingCartItem {
+        $this->assertOpen();
+
         $cart = $this->exists ? $this : static::completelyNew();
 
         $attributes = [
@@ -164,6 +176,7 @@ class ShoppingCart extends Model
             'currency' => $price->currency,
             'meta' => $meta,
             'visible_in_cart' => $visibleInCart,
+            'custom_price' => $customPrice,
         ];
 
         $itemModel = config('cart.models.shopping_cart_item');
@@ -187,6 +200,25 @@ class ShoppingCart extends Model
         event(new ItemAdded($cart, $item));
 
         return $item;
+    }
+
+    /**
+     * Whether the cart may still be changed: a cart confirmed for payment is
+     * frozen until `confirmed_at` is cleared again.
+     */
+    public function isOpen(): bool
+    {
+        return $this->confirmed_at === null;
+    }
+
+    /**
+     * Refuse any change to a cart that has been confirmed for payment.
+     */
+    public function assertOpen(): void
+    {
+        if (! $this->isOpen()) {
+            throw CartLockedException::make();
+        }
     }
 
     /*
@@ -232,7 +264,10 @@ class ShoppingCart extends Model
 
         $this->forceFill(['shipping_method_id' => $method->id])->saveQuietly();
 
-        $price = $method->toPrice();
+        // Priced against this cart, not at face value: a method with a
+        // free-from-amount has to land at zero here as well, or the basket
+        // quotes a shipping cost the checkout then drops.
+        $price = $method->priceForCart($this);
         $this->addCustom($method->name, $price, CartItemType::Shipping, visibleInCart: false);
 
         event(new ShippingCalculated($this, $method, $price));
@@ -240,32 +275,51 @@ class ShoppingCart extends Model
 
     protected function recalculateDiscount(): void
     {
-        $discountItem = $this->discountItems()->first();
+        $codes = $this->discountItems()->pluck('description');
 
-        if (! $discountItem) {
+        if ($codes->isEmpty()) {
             return;
         }
 
-        $code = $discountItem->description;
-        $discountItem->delete();
+        $this->discountItems()->each(fn (ShoppingCartItem $item) => $item->delete());
         $this->unsetRelation('items');
 
-        $discount = config('cart.models.discount')::byCode($code);
+        // Reapply in the order they were added, so cumulative percentages keep
+        // their meaning. A code that no longer qualifies simply drops off.
+        foreach ($codes as $code) {
+            $discount = config('cart.models.discount')::byCode($code);
 
-        if ($discount) {
-            $this->applyDiscount($discount);
+            if ($discount) {
+                rescue(fn () => $this->applyDiscount($discount), report: false);
+            }
         }
     }
 
     /**
      * Apply a discount to the cart, or reject it with a reason.
+     *
+     * Codes stack only when every code on the cart — the ones already applied
+     * and the new one — is marked combinable; otherwise the new code replaces
+     * whatever was there. The same code never applies twice.
      */
     public function applyDiscount(Discount $discount): void
     {
+        $this->assertOpen();
+
         try {
+            if ($this->discountItems()->pluck('description')->contains($discount->discount_code)) {
+                throw new DiscountException(__('This voucher is already applied to your shopping cart.'));
+            }
+
+            if (! $this->canCombineWith($discount)) {
+                $this->removeDiscount();
+            }
+
             $discount->assertAllowedOn($this);
             $price = $discount->calculateForCart($this);
-            $this->addCustom($discount->discount_code, $price, CartItemType::Discount, visibleInCart: false);
+            // Never signature-combine: two codes share a null purchasable and
+            // would otherwise collapse into one double-quantity line.
+            $this->addCustom($discount->discount_code, $price, CartItemType::Discount, visibleInCart: false, combine: false);
             $this->unsetRelation('items');
             event(new DiscountApplied($this, $discount, $price));
         } catch (DiscountException $e) {
@@ -275,10 +329,37 @@ class ShoppingCart extends Model
         }
     }
 
-    public function removeDiscount(): void
+    /**
+     * Remove one discount by its code, or every discount when none is given.
+     */
+    public function removeDiscount(?string $code = null): void
     {
-        $this->discountItems()->each(fn (ShoppingCartItem $item) => $item->delete());
+        $this->discountItems()
+            ->when($code !== null, fn ($items) => $items->where('description', $code))
+            ->each(fn (ShoppingCartItem $item) => $item->delete());
         $this->unsetRelation('items');
+    }
+
+    /**
+     * Whether the given discount may live alongside the codes already applied.
+     */
+    protected function canCombineWith(Discount $discount): bool
+    {
+        $applied = $this->discountItems()->pluck('description');
+
+        if ($applied->isEmpty()) {
+            return true;
+        }
+
+        if (! $discount->is_combinable) {
+            return false;
+        }
+
+        $discountModel = config('cart.models.discount');
+
+        return $applied->every(
+            fn (string $code): bool => (bool) $discountModel::byCode($code)?->is_combinable,
+        );
     }
 
     /**
@@ -289,6 +370,8 @@ class ShoppingCart extends Model
      */
     public function selectShippingMethod(?ShippingMethod $method): void
     {
+        $this->assertOpen();
+
         $this->getShippingItem()?->delete();
         $this->unsetRelation('items');
 
@@ -310,6 +393,8 @@ class ShoppingCart extends Model
      */
     public function setFee(string $description, ?Price $price): void
     {
+        $this->assertOpen();
+
         $this->feeItems()->each(fn (ShoppingCartItem $item) => $item->delete());
         $this->unsetRelation('items');
 
@@ -439,9 +524,64 @@ class ShoppingCart extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function convertToOrder(): Order
+    /**
+     * Turn the cart into an order. When the settled payment amount is passed,
+     * it must equal the cart's total to the cent — a mismatch means the cart
+     * changed after the payment started (or the payment settled short), and an
+     * order must never be created for a different amount than was paid.
+     */
+    public function convertToOrder(?int $expectedTotalAmount = null): Order
     {
+        if ($expectedTotalAmount !== null && $expectedTotalAmount !== $this->getTotalAmount()) {
+            throw PaymentAmountMismatchException::make($expectedTotalAmount, $this->getTotalAmount());
+        }
+
         return config('cart.models.order')::createFromShoppingCart($this);
+    }
+
+    /**
+     * Re-ask every purchasable-priced line for its current price and reprice
+     * the lines that moved, firing {@see ItemPriceChanged} per line. Lines with
+     * a caller-chosen price (options, fees) are left alone. Returns the lines
+     * that changed, so a storefront can tell the customer what moved.
+     *
+     * @return Collection<int, ShoppingCartItem>
+     */
+    public function refreshPrices(): Collection
+    {
+        $this->assertOpen();
+
+        $changed = [];
+
+        foreach ($this->productItems() as $item) {
+            if ($item->custom_price) {
+                continue;
+            }
+
+            $purchasable = $item->resolvePurchasable();
+
+            if (! $purchasable) {
+                continue;
+            }
+
+            $current = $purchasable->getPurchasablePrice($item->quantity);
+
+            if ($current->equals($item->price())) {
+                continue;
+            }
+
+            $from = $item->price();
+            $item->applyPrice($current);
+            $changed[] = $item;
+
+            event(new ItemPriceChanged($this, $item, $from, $current));
+        }
+
+        if ($changed !== []) {
+            $this->unsetRelation('items');
+        }
+
+        return new Collection($changed);
     }
 
     /**
@@ -451,6 +591,8 @@ class ShoppingCart extends Model
      */
     public function mergeFrom(ShoppingCart $source): void
     {
+        $this->assertOpen();
+
         /** @var iterable<ShoppingCartItem> $productItems */
         $productItems = $source->items()->where('type', CartItemType::Product)->get();
 
@@ -501,6 +643,34 @@ class ShoppingCart extends Model
     public function getPayableDescription(): string
     {
         return __('Order').' #'.$this->display_id;
+    }
+
+    /**
+     * A frozen description of what a payment for this cart covers. Payment
+     * integrations (marshmallow/payable stores this as `payable_snapshot` the
+     * moment a payment starts) keep it next to the payment, so the webhook can
+     * prove what the settled amount bought even when the cart changed or was
+     * deleted in the meantime.
+     *
+     * @return array<string, mixed>
+     */
+    public function getPayableSnapshot(): array
+    {
+        return [
+            'cart_id' => $this->id,
+            'display_id' => $this->display_id,
+            'total_amount' => $this->getTotalAmount(),
+            'total_vat_amount' => $this->getTotalVatAmount(),
+            'lines' => $this->loadedItems()->map(fn (ShoppingCartItem $item): array => [
+                'description' => $item->description,
+                'type' => $item->type->value,
+                'quantity' => $item->quantity,
+                'unit_amount' => $item->getUnitAmount(),
+                'total_amount' => $item->getTotalAmount(),
+                'vat_percentage' => $item->vat_percentage,
+                'currency' => $item->currency,
+            ])->values()->all(),
+        ];
     }
 
     public function getCustomer(): ?Model

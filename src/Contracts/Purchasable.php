@@ -28,9 +28,12 @@ interface Purchasable
     public function getPurchasableName(): string;
 
     /**
-     * The unit price snapshotted onto the cart line at the moment of adding.
+     * The unit price snapshotted onto the cart line at the moment of adding,
+     * for the given quantity. Tiered pricing lives here: an implementation may
+     * return a lower unit price once the quantity reaches a volume break. The
+     * cart re-asks whenever the line's quantity changes.
      */
-    public function getPurchasablePrice(): Price;
+    public function getPurchasablePrice(int $quantity = 1): Price;
 
     /**
      * Whether the given quantity may be added to (or kept in) the cart.

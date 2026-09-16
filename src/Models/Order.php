@@ -13,8 +13,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Marshmallow\Addressable\Traits\Addressable;
 use Marshmallow\Ecommerce\Cart\Concerns\CalculatesTotals;
+use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
+use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Enums\OrderStatus;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
+use Marshmallow\Ecommerce\Cart\Events\OrderRefunded;
 use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
 
 /**
@@ -54,10 +57,18 @@ class Order extends Model
     /**
      * Create (or return the existing) order for a cart. Idempotent on the
      * cart's id, so a webhook that fires twice never creates a second order.
+     *
+     * {@see OrderCreated} fires *after* the transaction commits. Its listeners
+     * mail the confirmation, which means touching the queue: a queue that is
+     * unreachable must never roll back an order the customer already paid for.
+     * The event is skipped for a cart that was already converted, so a second
+     * webhook does not mail a second confirmation either.
      */
     public static function createFromShoppingCart(ShoppingCart $cart): Order
     {
-        return DB::transaction(function () use ($cart): Order {
+        /** @var array{0: Order, 1: bool} $result */
+        $result = DB::transaction(function () use ($cart): array {
+            /** @var class-string<Order> $orderModel */
             $orderModel = config('cart.models.order');
 
             // Without global scopes on purpose: an application can hide a
@@ -65,12 +76,12 @@ class Order extends Model
             // missing an existing one here would breach the unique
             // shopping_cart_id constraint on the second webhook. Carry a
             // customer back to the still-locked cart with a quiet write.
-            if ($existing = $orderModel::withoutGlobalScopes()->where('shopping_cart_id', $cart->id)->first()) {
+            if ($existing = $orderModel::query()->withoutGlobalScopes()->where('shopping_cart_id', $cart->id)->first()) {
                 if ($existing->customer_id && ! $cart->customer_id) {
                     $cart->forceFill(['customer_id' => $existing->customer_id])->saveQuietly();
                 }
 
-                return $existing;
+                return [$existing, false];
             }
 
             $cart->loadMissing('items');
@@ -124,10 +135,16 @@ class Order extends Model
                 ]);
             }
 
-            event(new OrderCreated($order));
-
-            return $order;
+            return [$order, true];
         });
+
+        [$order, $created] = $result;
+
+        if ($created) {
+            event(new OrderCreated($order));
+        }
+
+        return $order;
     }
 
     protected static function assertItemsAvailable(ShoppingCart $cart): void
@@ -180,6 +197,53 @@ class Order extends Model
     public function markAsCompleted(): void
     {
         $this->setStatus(OrderStatus::Completed);
+    }
+
+    public function isRefunded(): bool
+    {
+        return $this->status === OrderStatus::Refunded;
+    }
+
+    public function markAsRefunded(): void
+    {
+        $this->setStatus(OrderStatus::Refunded);
+        event(new OrderRefunded($this));
+    }
+
+    public function scopeRefunded(Builder $query): void
+    {
+        $query->where('status', OrderStatus::Refunded);
+    }
+
+    /**
+     * Start a fresh cart holding this order's products again, at today's
+     * prices and availability. Lines whose product has since vanished or sold
+     * out are simply left off; the customer sees today's truth, not a replay
+     * of the old receipt. The new cart becomes the session's cart.
+     */
+    public function toNewCart(): ShoppingCart
+    {
+        $cart = config('cart.models.shopping_cart')::completelyNew();
+
+        foreach ($this->items as $item) {
+            if ($item->type !== CartItemType::Product) {
+                continue;
+            }
+
+            $purchasable = $item->purchasable()->first();
+
+            if (! $purchasable instanceof Purchasable) {
+                continue;
+            }
+
+            if (! $purchasable->isAvailableForPurchase($item->quantity, $cart)) {
+                continue;
+            }
+
+            $cart->add($purchasable, $item->quantity, $item->meta);
+        }
+
+        return $cart;
     }
 
     protected function setStatus(OrderStatus $status): void

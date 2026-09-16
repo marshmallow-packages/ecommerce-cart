@@ -29,7 +29,7 @@ Price::fromNet($cents, $vatPercentage, 'EUR');   // from a VAT-exclusive amount
 
 ## 4. Run the schema upgrade
 
-The upgrade migration converts existing item rows: it adds `vat_percentage`, `currency`, `purchasable_id`, `meta` (and `signature` on cart items), backfills them from the old `vatrate_id` / `currency_id` / `product_id` foreign keys, and then drops those columns along with `display_price` and the cart's `hashed_ip_address`.
+The upgrade migration converts existing item rows: it adds `vat_percentage`, `currency`, `purchasable_id`, `meta` (and `signature` on cart items), backfills them from the old `vatrate_id` / `currency_id` / `product_id` foreign keys, and then drops those columns along with `display_price` and the cart's `hashed_ip_address`. It also adds `custom_price` to cart items (`true` for existing rows, so legacy lines are never repriced behind your back) and `is_combinable` to discounts (`false`, matching the old single-discount behaviour).
 
 ```bash
 php artisan vendor:publish --tag=cart-upgrade-migrations
