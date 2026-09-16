@@ -1,10 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Marshmallow\Ecommerce\Cart\Exceptions;
 
-use Exception;
-
-class DiscountException extends Exception
-{
-    //
-}
+class DiscountException extends CartException {}

@@ -1,324 +1,304 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Marshmallow\Ecommerce\Cart\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
-use Marshmallow\Ecommerce\Cart\Traits\Totals;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Marshmallow\Addressable\Traits\Addressable;
+use Marshmallow\Ecommerce\Cart\Concerns\CalculatesTotals;
+use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
+use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
+use Marshmallow\Ecommerce\Cart\Enums\OrderStatus;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
-use Marshmallow\Ecommerce\Cart\Traits\PriceFormatter;
-use Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem;
+use Marshmallow\Ecommerce\Cart\Events\OrderRefunded;
+use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
 
+/**
+ * A placed order: an immutable financial record derived from a paid cart.
+ *
+ * @property string $shopping_cart_id
+ * @property int $shopping_cart_display_id
+ * @property int|null $customer_id
+ * @property int|null $user_id
+ * @property int|null $shipping_address_id
+ * @property int|null $invoice_address_id
+ * @property int|null $shipping_method_id
+ * @property string|null $note
+ * @property string $currency
+ * @property OrderStatus $status
+ * @property Collection<int, OrderItem> $items
+ */
 class Order extends Model
 {
-    use Totals;
     use Addressable;
-    use PriceFormatter;
-
-    public const STATUS_PENDING = 'PENDING';
-    public const STATUS_CANCELED = 'CANCELED';
-    public const STATUS_COMPLETED = 'COMPLETED';
+    use CalculatesTotals;
+    use HasFactory;
 
     protected $guarded = [];
 
-    protected $casts = [
-        'shipped_at' => 'datetime',
-    ];
-
-    public static function createUniqueFromShoppingCart(ShoppingCart $shoppingCart)
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
     {
-        /**
-         * Check if its already converted. Without global scopes on purpose:
-         * an application can hide not-yet-finalized orders behind a global
-         * scope, and missing an existing order here would violate the unique
-         * shopping_cart_id constraint.
-         */
-        $order = self::query()
-            ->withoutGlobalScopes()
-            ->where('shopping_cart_id', $shoppingCart->id)
-            ->first();
-        if ($order) {
-            if ($order->customer_id && !$shoppingCart->customer_id) {
-                $shoppingCart->update([
-                    'customer_id' => $order->customer_id
-                ]);
-            }
-            return $order;
-        }
+        return [
+            'status' => OrderStatus::class,
+            'shipped_at' => 'datetime',
+        ];
+    }
 
-        /**
-         * Convert the prospect to a customer
-         */
-        $prospect = $shoppingCart->prospect;
-        if (!$prospect) {
-            $prospect = config('cart.models.prospect')::withTrashed()->find($shoppingCart->prospect_id);
-        }
+    /**
+     * Create (or return the existing) order for a cart. Idempotent on the
+     * cart's id, so a webhook that fires twice never creates a second order.
+     *
+     * {@see OrderCreated} fires *after* the transaction commits. Its listeners
+     * mail the confirmation, which means touching the queue: a queue that is
+     * unreachable must never roll back an order the customer already paid for.
+     * The event is skipped for a cart that was already converted, so a second
+     * webhook does not mail a second confirmation either.
+     */
+    public static function createFromShoppingCart(ShoppingCart $cart): Order
+    {
+        /** @var array{0: Order, 1: bool} $result */
+        $result = DB::transaction(function () use ($cart): array {
+            /** @var class-string<Order> $orderModel */
+            $orderModel = config('cart.models.order');
 
-        $customer = $shoppingCart->customer ?? $prospect->convertToCustomer();
-
-        /**
-         * Convert the address so the are connected to the customer
-         * instead of the prospect.
-         */
-        $ignore_columns = ['id', 'addressable_type', 'addressable_id', 'created_at', 'updated_at', 'deleted_at'];
-
-        if ($shipping_address = $shoppingCart->shippingAddress()->withTrashed()->first()) {
-
-            /**
-             * Connect the address to the customer if we are dealing with a prospect.
-             */
-            if ($shipping_address->addressable_type == config('cart.models.prospect')) {
-
-                $prospect_shipping_address = collect(
-                    $shipping_address->toArray()
-                )
-                    ->except($ignore_columns)
-                    ->toArray();
-
-                $shipping_address = $customer->addresses()->create($prospect_shipping_address);
-            }
-
-            $invoice_address = $shipping_address;
-
-            /**
-             * If there is another address for invoice, we need to create
-             * another one.
-             */
-            if ($shoppingCart->shipping_address_id != $shoppingCart->invoice_address_id) {
-
-                $invoice_address = $shoppingCart->invoiceAddress()->withTrashed()->first();
-
-                if ($invoice_address->addressable_type == config('cart.models.prospect')) {
-                    $prospect_invoice_address = collect(
-                        $invoice_address->toArray()
-                    )
-                        ->except($ignore_columns)
-                        ->toArray();
-
-                    $invoice_address = $customer->addresses()->create($prospect_invoice_address);
+            // Without global scopes on purpose: an application can hide a
+            // not-yet-finalised order behind a scope (a site scope, say), and
+            // missing an existing one here would breach the unique
+            // shopping_cart_id constraint on the second webhook. Carry a
+            // customer back to the still-locked cart with a quiet write.
+            if ($existing = $orderModel::query()->withoutGlobalScopes()->where('shopping_cart_id', $cart->id)->first()) {
+                if ($existing->customer_id && ! $cart->customer_id) {
+                    $cart->forceFill(['customer_id' => $existing->customer_id])->saveQuietly();
                 }
+
+                return [$existing, false];
             }
 
+            $cart->loadMissing('items');
+            static::assertItemsAvailable($cart);
 
-            /**
-             * Delete the address of the prospect. We will be deleting
-             * the prospect as well because it's not a prospect anymore.
-             */
-            if ($prospect) {
-                $prospect->addresses->each(function ($address) {
-                    $address->delete();
-                });
-                $prospect->delete();
-            }
-        }
+            $customer = $cart->customer ?? $cart->prospect?->convertToCustomer();
 
-
-        /**
-         * Create the order
-         */
-        $order = config('cart.models.order')::updateOrCreate([
-            'shopping_cart_id' => $shoppingCart->id,
-        ], [
-            'shopping_cart_id' => $shoppingCart->id,
-            'shopping_cart_display_id' => $shoppingCart->display_id,
-            'customer_id' => $customer->id,
-            'user_id' => $shoppingCart->user_id,
-            'shipping_address_id' => (isset($shipping_address) && $shipping_address) ? $shipping_address->id : null,
-            'invoice_address_id' => (isset($invoice_address) && $invoice_address) ? $invoice_address->id : null,
-            'shipping_method_id' => config('cart.models.shipping_method')::first()?->id,
-            'note' => $shoppingCart->note,
-            'currency_id' => config('cart.models.currency')::first()->id,
-            'display_price' => $shoppingCart->getTotalAmount(),
-            'price_excluding_vat' => $shoppingCart->getTotalAmountWithoutVat(),
-            'price_including_vat' => $shoppingCart->getTotalAmountIncludingVat(),
-            'vat_amount' => $shoppingCart->getTotalVatAmount(),
-            'display_discount' => 0,
-            'discount_excluding_vat' => 0,
-            'discount_including_vat' => 0,
-            'discount_vat_amount' => 0,
-            'display_shipping' => $shoppingCart->getShippingAmount(),
-            'shipping_excluding_vat' => $shoppingCart->getShippingAmountWithoutVat(),
-            'shipping_including_vat' => $shoppingCart->getShippingAmountIncludingVat(),
-            'shipping_vat_amount' => $shoppingCart->getShippingVatAmount(),
-        ]);
-
-        if ($order->customer_id && !$shoppingCart->customer_id) {
-            $shoppingCart->update([
-                'customer_id' => $order->customer_id
+            $order = $orderModel::create([
+                'shopping_cart_id' => $cart->id,
+                'shopping_cart_display_id' => $cart->display_id,
+                'customer_id' => $customer?->id,
+                'user_id' => $cart->user_id,
+                'shipping_address_id' => $cart->shipping_address_id,
+                'invoice_address_id' => $cart->invoice_address_id ?? $cart->shipping_address_id,
+                'shipping_method_id' => $cart->shipping_method_id,
+                'note' => $cart->note,
+                'currency' => static::currencyFromCart($cart),
+                'status' => OrderStatus::Pending,
+                'subtotal_excluding_vat' => $cart->getSubtotalWithoutVat(),
+                'subtotal_including_vat' => $cart->getSubtotal(),
+                'subtotal_vat_amount' => $cart->getSubtotal() - $cart->getSubtotalWithoutVat(),
+                'shipping_excluding_vat' => $cart->getShippingAmountWithoutVat(),
+                'shipping_including_vat' => $cart->getShippingAmount(),
+                'shipping_vat_amount' => $cart->getShippingVatAmount(),
+                'discount_excluding_vat' => $cart->getDiscountAmountWithoutVat(),
+                'discount_including_vat' => $cart->getDiscountAmount(),
+                'discount_vat_amount' => $cart->getDiscountVatAmount(),
+                'total_excluding_vat' => $cart->getTotalAmountWithoutVat(),
+                'total_including_vat' => $cart->getTotalAmount(),
+                'total_vat_amount' => $cart->getTotalVatAmount(),
             ]);
-        }
 
-        /**
-         * Add the shopping cart items to the order
-         */
-        $shoppingCart->items->each(function ($item) use ($order) {
+            if ($customer) {
+                $cart->forceFill(['customer_id' => $customer->id])->saveQuietly();
+            }
 
-            $item_created = config('cart.models.order_item')::where('order_id', $order->id)
-                ->where('shopping_cart_item_id', $item->id)
-                ->first();
-
-            /**
-             * Check if this item is already created.
-             */
-            if (!$item_created) {
-
-                $data = [
-                    'order_id' => $order->id,
+            foreach ($cart->items as $item) {
+                $order->items()->create([
                     'shopping_cart_item_id' => $item->id,
-                    'product_id' => $item->product_id,
-                    'vatrate_id' => $item->vatrate_id,
-                    'currency_id' => $item->currency_id,
+                    'purchasable_id' => $item->purchasable_id,
                     'description' => $item->description,
-                    'quantity' => $item->quantity,
                     'type' => $item->type,
-                    'display_price' => $item->display_price,
+                    'quantity' => $item->quantity,
                     'price_excluding_vat' => $item->price_excluding_vat,
                     'price_including_vat' => $item->price_including_vat,
                     'vat_amount' => $item->vat_amount,
-                    'display_discount' => 0,
-                    'discount_excluding_vat' => 0,
-                    'discount_including_vat' => 0,
-                    'discount_vat_amount' => 0,
+                    'vat_percentage' => $item->vat_percentage,
+                    'currency' => $item->currency,
+                    'meta' => $item->meta,
                     'visible_in_cart' => $item->visible_in_cart,
-                ];
-
-                config('cart.models.order_item')::updateOrCreate([
-                    'order_id' => $order->id,
-                    'shopping_cart_item_id' => $item->id,
-                ], $data);
+                ]);
             }
+
+            return [$order, true];
         });
 
-        if ($order->wasRecentlyCreated) {
+        [$order, $created] = $result;
+
+        if ($created) {
             event(new OrderCreated($order));
         }
 
         return $order;
     }
 
-    public function getShippedAtDateAsString(string $format = 'Y-m-d')
+    protected static function assertItemsAvailable(ShoppingCart $cart): void
     {
-        if ($this->shipped_at) {
-            return $this->shipped_at->format($format);
+        if (! config('cart.stock.check_on_checkout', true)) {
+            return;
         }
-        return __('Not yet');
+
+        foreach ($cart->productItems() as $item) {
+            $purchasable = $item->resolvePurchasable();
+
+            if ($purchasable && ! $purchasable->isAvailableForPurchase($item->quantity, $cart)) {
+                throw PurchasableUnavailableException::for($purchasable, $item->quantity);
+            }
+        }
     }
 
-    public function isPending()
+    protected static function currencyFromCart(ShoppingCart $cart): string
     {
-        return ($this->status == self::STATUS_PENDING);
+        $currency = $cart->items->pluck('currency')->first();
+
+        return is_string($currency) ? $currency : (string) config('cart.currency', 'EUR');
     }
 
-    public function isCanceled()
+    public function isPending(): bool
     {
-        return ($this->status == self::STATUS_CANCELED);
+        return $this->status === OrderStatus::Pending;
     }
 
-    public function isCompleted()
+    public function isCanceled(): bool
     {
-        return ($this->status == self::STATUS_COMPLETED);
+        return $this->status === OrderStatus::Canceled;
     }
 
-    public function markAsPending()
+    public function isCompleted(): bool
     {
-        $this->setStatus(self::STATUS_PENDING);
+        return $this->status === OrderStatus::Completed;
     }
 
-    public function markAsCanceled()
+    public function markAsPending(): void
     {
-        $this->setStatus(self::STATUS_CANCELED);
+        $this->setStatus(OrderStatus::Pending);
     }
 
-    public function markAsCompleted()
+    public function markAsCanceled(): void
     {
-        $this->setStatus(self::STATUS_COMPLETED);
+        $this->setStatus(OrderStatus::Canceled);
     }
 
-    protected function setStatus(string $status)
+    public function markAsCompleted(): void
+    {
+        $this->setStatus(OrderStatus::Completed);
+    }
+
+    public function isRefunded(): bool
+    {
+        return $this->status === OrderStatus::Refunded;
+    }
+
+    public function markAsRefunded(): void
+    {
+        $this->setStatus(OrderStatus::Refunded);
+        event(new OrderRefunded($this));
+    }
+
+    public function scopeRefunded(Builder $query): void
+    {
+        $query->where('status', OrderStatus::Refunded);
+    }
+
+    /**
+     * Start a fresh cart holding this order's products again, at today's
+     * prices and availability. Lines whose product has since vanished or sold
+     * out are simply left off; the customer sees today's truth, not a replay
+     * of the old receipt. The new cart becomes the session's cart.
+     */
+    public function toNewCart(): ShoppingCart
+    {
+        $cart = config('cart.models.shopping_cart')::completelyNew();
+
+        foreach ($this->items as $item) {
+            if ($item->type !== CartItemType::Product) {
+                continue;
+            }
+
+            $purchasable = $item->purchasable()->first();
+
+            if (! $purchasable instanceof Purchasable) {
+                continue;
+            }
+
+            if (! $purchasable->isAvailableForPurchase($item->quantity, $cart)) {
+                continue;
+            }
+
+            $cart->add($purchasable, $item->quantity, $item->meta);
+        }
+
+        return $cart;
+    }
+
+    protected function setStatus(OrderStatus $status): void
     {
         $this->status = $status;
         $this->saveQuietly();
     }
 
-    public function shippingAddress()
+    public function scopePending(Builder $query): void
     {
-        return config('cart.models.address')::where('id', $this->shipping_address_id)->withTrashed()->first();
+        $query->where('status', OrderStatus::Pending);
     }
 
-    public function invoiceAddress()
+    public function scopeCanceled(Builder $query): void
     {
-        return config('cart.models.address')::where('id', $this->invoice_address_id)->withTrashed()->first();
+        $query->where('status', OrderStatus::Canceled);
     }
 
-    public function getShippingItem()
+    public function scopeCompleted(Builder $query): void
     {
-        return $this->items()->where('type', ShoppingCartItem::TYPE_SHIPPING)->first();
+        $query->where('status', OrderStatus::Completed);
     }
 
-    public function scopePending(Builder $builder)
+    public function items(): HasMany
     {
-        $builder->where(function (Builder $builder) {
-            $builder->whereNull('status')
-                ->orwhere('status', self::STATUS_PENDING);
-        });
+        return $this->hasMany(config('cart.models.order_item'));
     }
 
-    public function scopeCanceled(Builder $builder)
+    public function customer(): BelongsTo
     {
-        $builder->where('status', self::STATUS_CANCELED);
+        return $this->belongsTo(config('cart.models.customer'));
     }
 
-    public function scopeCompleted(Builder $builder)
+    public function user(): BelongsTo
     {
-        $builder->where('status', self::STATUS_COMPLETED);
+        return $this->belongsTo(config('cart.models.user'));
     }
 
-    public function visibleItems()
+    public function shippingMethod(): BelongsTo
     {
-        return self::items()->visable()->get();
+        return $this->belongsTo(config('cart.models.shipping_method'));
     }
 
-    public function items()
+    public function cart(): BelongsTo
     {
-        return $this->hasMany(
-            config('cart.models.order_item')
-        );
+        return $this->belongsTo(config('cart.models.shopping_cart'), 'shopping_cart_id');
     }
 
-    public function customer()
+    public function shippingAddress(): BelongsTo
     {
-        return $this->belongsTo(
-            config('cart.models.customer')
-        );
+        return $this->belongsTo(config('cart.models.address'), 'shipping_address_id');
     }
 
-    public function user()
+    public function invoiceAddress(): BelongsTo
     {
-        return $this->belongsTo(
-            config('cart.models.user')
-        );
-    }
-
-    public function currency()
-    {
-        return $this->belongsTo(
-            config('cart.models.currency')
-        );
-    }
-
-    public function shippingMethod()
-    {
-        return $this->belongsTo(
-            config('cart.models.shipping_method')
-        );
-    }
-
-    public function cart()
-    {
-        return $this->belongsTo(
-            config('cart.models.shopping_cart'),
-            'shopping_cart_id'
-        );
+        return $this->belongsTo(config('cart.models.address'), 'invoice_address_id');
     }
 }

@@ -1,20 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Marshmallow\Ecommerce\Cart\Events;
 
-use Illuminate\Queue\SerializesModels;
 use Marshmallow\Ecommerce\Cart\Models\Order;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Broadcasting\InteractsWithSockets;
 
-class OrderCreated
+final class OrderCreated
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
-
-    public $order;
-
-    public function __construct(Order $order)
-    {
-        $this->order = $order;
-    }
+    public function __construct(public Order $order) {}
 }

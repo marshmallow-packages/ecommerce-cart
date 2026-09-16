@@ -1,44 +1,47 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Marshmallow\Ecommerce\Cart;
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 
+/**
+ * The entry point behind the Cart facade: it resolves the current cart from the
+ * session and exposes it to the request.
+ */
 class Cart
 {
-    public static $productConnection = null;
-    public static $currencyConnection = null;
+    public const REQUEST_KEY = 'cart';
 
-    public function addToRequest($request, $cart)
+    public function addToRequest(Request $request, ShoppingCart $cart): Request
     {
-        $request->attributes->add([
-            'cart' => $cart,
-        ]);
+        $request->attributes->set(self::REQUEST_KEY, $cart);
 
         return $request;
     }
 
-    public function getFromRequest()
+    public function getFromRequest(): ?ShoppingCart
     {
-        return request()->attributes->get('cart');
+        $cart = request()->attributes->get(self::REQUEST_KEY);
+
+        return $cart instanceof ShoppingCart ? $cart : null;
     }
 
-    public function getUserGuard()
+    public function getUserGuard(): string
     {
-        if ($guard = config('cart.customer_guard')) {
-            return $guard;
-        }
-
-        return Auth::getDefaultDriver();
+        return (string) (config('cart.customer_guard') ?: Auth::getDefaultDriver());
     }
 
+    /**
+     * The current cart, creating a fresh one if the session has none.
+     */
     public function get(): ShoppingCart
     {
-        if ($cart = config('cart.models.shopping_cart')::getBySession()) {
-            return $cart;
-        }
+        $cartModel = config('cart.models.shopping_cart');
 
-        return config('cart.models.shopping_cart')::completelyNew();
+        return $cartModel::getBySession() ?? $cartModel::completelyNew();
     }
 }

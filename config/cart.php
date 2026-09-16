@@ -1,91 +1,152 @@
 <?php
 
-use Marshmallow\Ecommerce\Cart\Listeners\ConnectExistingCartToUser;
-use Marshmallow\Ecommerce\Cart\Listeners\DisconnectExistingCartToUser;
+declare(strict_types=1);
 
-/**
- * All classes can be overrules by your own custom classes.
- * The classes that you overrule should extend the original version
- * for the cart system to work properly.
- */
+use App\Models\Product;
+use App\Models\User;
+use Marshmallow\Addressable\Models\Address;
+use Marshmallow\Datasets\Country\Models\Country;
+use Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand;
+use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
+use Marshmallow\Ecommerce\Cart\Listeners\DisconnectCartFromUser;
+use Marshmallow\Ecommerce\Cart\Listeners\MergeCartOnLogin;
+use Marshmallow\Ecommerce\Cart\Models\Customer;
+use Marshmallow\Ecommerce\Cart\Models\Discount;
+use Marshmallow\Ecommerce\Cart\Models\Order;
+use Marshmallow\Ecommerce\Cart\Models\OrderItem;
+use Marshmallow\Ecommerce\Cart\Models\Prospect;
+use Marshmallow\Ecommerce\Cart\Models\ShippingMethod;
+use Marshmallow\Ecommerce\Cart\Models\ShippingMethodCondition;
+use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem;
 
 return [
 
-
-    /**
-     * Models
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | Models
+    |--------------------------------------------------------------------------
+    |
+    | Every model the cart touches is resolved through this map, so a host
+    | application can swap in its own subclass without editing the package.
+    | The `product` entry must point at a model implementing the Purchasable
+    | contract; `address` and `country` are supplied by the host or the
+    | marshmallow/addressable and dataset-country packages.
+    |
+    */
     'models' => [
-        'user' => \App\Models\User::class,
-        'product' => \Marshmallow\Product\Models\Product::class,
-        'product_category' => \Marshmallow\Product\Models\ProductCategory::class,
-        'country' => \Marshmallow\Datasets\Country\Models\Country::class,
-        'prospect' => \Marshmallow\Ecommerce\Cart\Models\Prospect::class,
-        'discount' => \Marshmallow\Ecommerce\Cart\Models\Discount::class,
-        'customer' => \Marshmallow\Ecommerce\Cart\Models\Customer::class,
-        'shopping_cart' => \Marshmallow\Ecommerce\Cart\Models\ShoppingCart::class,
-        'shopping_cart_item' => \Marshmallow\Ecommerce\Cart\Models\ShoppingCartItem::class,
-        'inquiry' => \Marshmallow\Ecommerce\Cart\Models\Inquiry::class,
-        'inquiry_item' => \Marshmallow\Ecommerce\Cart\Models\InquiryItem::class,
-        'order' => \Marshmallow\Ecommerce\Cart\Models\Order::class,
-        'order_item' => \Marshmallow\Ecommerce\Cart\Models\OrderItem::class,
-        'address' => \Marshmallow\Addressable\Models\Address::class,
-        'currency' => \Marshmallow\Priceable\Models\Currency::class,
-        'shipping_method' => \Marshmallow\Ecommerce\Cart\Models\ShippingMethod::class,
-        'shipping_method_condition' => \Marshmallow\Ecommerce\Cart\Models\ShippingMethodCondition::class,
-        'vat_rate' => \Marshmallow\Priceable\Models\VatRate::class,
+        'user' => User::class,
+        'product' => Product::class,
+        'prospect' => Prospect::class,
+        'customer' => Customer::class,
+        'discount' => Discount::class,
+        'shopping_cart' => ShoppingCart::class,
+        'shopping_cart_item' => ShoppingCartItem::class,
+        'order' => Order::class,
+        'order_item' => OrderItem::class,
+        'shipping_method' => ShippingMethod::class,
+        'shipping_method_condition' => ShippingMethodCondition::class,
+        'address' => Address::class,
+        'country' => Country::class,
     ],
 
-    /**
-     * Nova resources
-     */
-    'nova' => [
-        'resources' => [
-            'product' => \Marshmallow\Product\Nova\Product::class,
-            'product_category' => \Marshmallow\Product\Nova\ProductCategory::class,
-            'prospect' => \Marshmallow\Ecommerce\Cart\Nova\Prospect::class,
-            'customer' => \Marshmallow\Ecommerce\Cart\Nova\Customer::class,
-            'order' => \Marshmallow\Ecommerce\Cart\Nova\Order::class,
-            'order_item' => \Marshmallow\Ecommerce\Cart\Nova\OrderItem::class,
-            'country' => \Marshmallow\Datasets\Country\Nova\Country::class,
-            'shopping_cart' => \Marshmallow\Ecommerce\Cart\Nova\ShoppingCart::class,
-            'shipping_method' => \Marshmallow\Ecommerce\Cart\Nova\ShippingMethod::class,
-            'shipping_method_condition' => \Marshmallow\Ecommerce\Cart\Nova\ShippingMethodCondition::class,
-            'vat_rate' => \Marshmallow\Priceable\Nova\VatRate::class,
-        ],
-    ],
+    /*
+    |--------------------------------------------------------------------------
+    | Currency & VAT
+    |--------------------------------------------------------------------------
+    |
+    | `currency` is the default ISO 4217 code stamped onto Price value objects.
+    | `locale` drives the money formatter. `prices_include_vat` records whether
+    | prices entered in the back office are gross or net; the Price object is
+    | always gross-canonical regardless. `default_vat_percentage` is the rate a
+    | discount line inherits when it cannot borrow one from the cart.
+    |
+    */
+    'currency' => env('CART_CURRENCY', 'EUR'),
+    'locale' => env('CART_LOCALE', 'nl_NL'),
+    'prices_include_vat' => true,
+    'default_vat_percentage' => 21.0,
 
-    /**
-     * HTTP classes
-     */
-    'http' => [
-        'middleware' => [
-            'cart' => \Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware::class,
-        ],
-    ],
-
-    /**
-     * Commands used by the cart package
-     */
-    'commands' => [
-        'clean_carts_command' => \Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand::class,
-    ],
-
-    /**
-     * Override the guard to use to connect
-     * a loggedin user to the shopping carts
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | Cart identification
+    |--------------------------------------------------------------------------
+    |
+    | The guard the cart uses to connect a signed-in user, and the request
+    | paths on which the cart middleware should do nothing (e.g. an admin
+    | panel that manages its own carts).
+    |
+    */
     'customer_guard' => 'web',
 
-    /**
-     * Listeners
-     */
+    'middleware' => [
+        'alias' => 'cart',
+        'class' => CartMiddleware::class,
+        'excluded_paths' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Login / logout listeners
+    |--------------------------------------------------------------------------
+    |
+    | Merge the guest cart into the user's existing open cart on login, and
+    | disconnect it on logout. Set either to an empty array to opt out.
+    |
+    */
     'listeners' => [
-        'login' => [
-            ConnectExistingCartToUser::class,
+        'login' => [MergeCartOnLogin::class],
+        'logout' => [DisconnectCartFromUser::class],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Stock
+    |--------------------------------------------------------------------------
+    |
+    | Whether Purchasable::isAvailableForPurchase() is consulted when an item
+    | is added and again per line before an order is created.
+    |
+    */
+    'stock' => [
+        'check_on_add' => true,
+        'check_on_checkout' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Abandoned carts
+    |--------------------------------------------------------------------------
+    |
+    | A cart with no activity for `expires_after_days` counts as abandoned and
+    | fires CartAbandoned; one untouched for `delete_after_days` is pruned by
+    | the ecommerce:clean-carts command.
+    |
+    */
+    'abandoned' => [
+        'expires_after_days' => 30,
+        'delete_after_days' => 90,
+        'fire_events' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Discounts
+    |--------------------------------------------------------------------------
+    */
+    'discount' => [
+        'voucher' => [
+            'min_length' => 8,
+            'exclude_rules' => ['Symbols', 'Lowercase', 'Similar'],
         ],
-        'logout' => [
-            DisconnectExistingCartToUser::class,
-        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Console commands
+    |--------------------------------------------------------------------------
+    */
+    'commands' => [
+        'clean_carts' => CleanCartsCommand::class,
     ],
 ];
