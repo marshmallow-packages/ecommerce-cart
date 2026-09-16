@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use Marshmallow\Addressable\Traits\Addressable;
 use Marshmallow\Ecommerce\Cart\Concerns\CalculatesTotals;
@@ -18,6 +19,8 @@ use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Enums\OrderStatus;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
 use Marshmallow\Ecommerce\Cart\Events\OrderRefunded;
+use Marshmallow\Ecommerce\Cart\Exceptions\EmptyCartException;
+use Marshmallow\Ecommerce\Cart\Exceptions\InvalidOrderStatusTransitionException;
 use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
 
 /**
@@ -40,6 +43,7 @@ class Order extends Model
     use Addressable;
     use CalculatesTotals;
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -85,6 +89,11 @@ class Order extends Model
             }
 
             $cart->loadMissing('items');
+
+            if ($cart->productItems()->isEmpty()) {
+                throw EmptyCartException::make();
+            }
+
             static::assertItemsAvailable($cart);
 
             $customer = $cart->customer ?? $cart->prospect?->convertToCustomer();
@@ -186,17 +195,17 @@ class Order extends Model
 
     public function markAsPending(): void
     {
-        $this->setStatus(OrderStatus::Pending);
+        $this->transitionTo(OrderStatus::Pending);
     }
 
     public function markAsCanceled(): void
     {
-        $this->setStatus(OrderStatus::Canceled);
+        $this->transitionTo(OrderStatus::Canceled);
     }
 
     public function markAsCompleted(): void
     {
-        $this->setStatus(OrderStatus::Completed);
+        $this->transitionTo(OrderStatus::Completed);
     }
 
     public function isRefunded(): bool
@@ -204,10 +213,15 @@ class Order extends Model
         return $this->status === OrderStatus::Refunded;
     }
 
+    /**
+     * {@see OrderRefunded} fires once: a second call for an order that is
+     * already refunded (a webhook retry, say) changes and announces nothing.
+     */
     public function markAsRefunded(): void
     {
-        $this->setStatus(OrderStatus::Refunded);
-        event(new OrderRefunded($this));
+        if ($this->transitionTo(OrderStatus::Refunded)) {
+            event(new OrderRefunded($this));
+        }
     }
 
     public function scopeRefunded(Builder $query): void
@@ -246,10 +260,27 @@ class Order extends Model
         return $cart;
     }
 
-    protected function setStatus(OrderStatus $status): void
+    /**
+     * Move the order to a status, quietly. Returns false when the order is
+     * already there, and throws when {@see OrderStatus::canTransitionTo()}
+     * rules the move out.
+     */
+    protected function transitionTo(OrderStatus $status): bool
     {
+        $from = $this->status ?? OrderStatus::Pending;
+
+        if ($from === $status) {
+            return false;
+        }
+
+        if (! $from->canTransitionTo($status)) {
+            throw InvalidOrderStatusTransitionException::make($from, $status);
+        }
+
         $this->status = $status;
         $this->saveQuietly();
+
+        return true;
     }
 
     public function scopePending(Builder $query): void

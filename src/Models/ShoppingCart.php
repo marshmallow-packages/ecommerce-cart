@@ -26,6 +26,7 @@ use Marshmallow\Ecommerce\Cart\Events\ItemAdded;
 use Marshmallow\Ecommerce\Cart\Events\ItemPriceChanged;
 use Marshmallow\Ecommerce\Cart\Events\ShippingCalculated;
 use Marshmallow\Ecommerce\Cart\Exceptions\CartLockedException;
+use Marshmallow\Ecommerce\Cart\Exceptions\CurrencyMismatchException;
 use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 use Marshmallow\Ecommerce\Cart\Exceptions\PaymentAmountMismatchException;
 use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
@@ -52,6 +53,7 @@ use Marshmallow\Payable\Traits\PayableWithItems;
  * @property int|null $shipping_method_id
  * @property string|null $note
  * @property Carbon|null $confirmed_at
+ * @property Carbon|null $abandoned_at
  * @property Collection<int, ShoppingCartItem> $items
  * @property-read Prospect|null $prospect
  * @property-read Customer|null $customer
@@ -81,6 +83,7 @@ class ShoppingCart extends Model
     {
         return [
             'confirmed_at' => 'datetime',
+            'abandoned_at' => 'datetime',
         ];
     }
 
@@ -163,6 +166,7 @@ class ShoppingCart extends Model
         $this->assertOpen();
 
         $cart = $this->exists ? $this : static::completelyNew();
+        $cart->assertCurrencyMatches($price->currency);
 
         $attributes = [
             'shopping_cart_id' => $cart->id,
@@ -203,6 +207,18 @@ class ShoppingCart extends Model
     }
 
     /**
+     * Totals are plain sums of cents, so every line has to share one currency.
+     */
+    protected function assertCurrencyMatches(string $currency): void
+    {
+        $other = $this->items()->where('currency', '!=', $currency)->value('currency');
+
+        if (is_string($other)) {
+            throw CurrencyMismatchException::make($other, $currency);
+        }
+    }
+
+    /**
      * Whether the cart may still be changed: a cart confirmed for payment is
      * frozen until `confirmed_at` is cleared again.
      */
@@ -236,6 +252,12 @@ class ShoppingCart extends Model
     {
         if ($item->isShippingCost() || $item->isDiscount() || $item->isFee()) {
             return;
+        }
+
+        // A change to the contents is activity: a cart flagged as abandoned
+        // is live again, and housekeeping may flag it afresh later.
+        if ($this->abandoned_at) {
+            $this->forceFill(['abandoned_at' => null])->saveQuietly();
         }
 
         $this->unsetRelation('items');
@@ -731,7 +753,14 @@ class ShoppingCart extends Model
     {
         $cart = static::find(session()->get(self::SESSION_KEY));
 
-        if ($cart && ! $cart->user && ! $cart->customer && ! $cart->prospect) {
+        if (! $cart) {
+            return null;
+        }
+
+        // A cart from before the guard token existed (the upgrade leaves the
+        // column empty) can never be authorised, and one without any owner is
+        // an orphan: both are replaced by a fresh cart.
+        if (! $cart->guard_token || (! $cart->user && ! $cart->customer && ! $cart->prospect)) {
             return static::completelyNew();
         }
 
@@ -784,7 +813,10 @@ class ShoppingCart extends Model
     {
         $token = session()->get(self::SESSION_TOKEN_KEY);
 
-        return is_string($token) && hash_equals($this->guard_token, $token);
+        return is_string($this->guard_token)
+            && $this->guard_token !== ''
+            && is_string($token)
+            && hash_equals($this->guard_token, $token);
     }
 
     /*

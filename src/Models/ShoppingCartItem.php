@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Ecommerce\Cart\Concerns\CalculatesItemTotals;
 use Marshmallow\Ecommerce\Cart\Contracts\CartLine;
 use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
@@ -39,6 +40,7 @@ class ShoppingCartItem extends Model implements CartLine
 {
     use CalculatesItemTotals;
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -132,14 +134,25 @@ class ShoppingCartItem extends Model implements CartLine
      */
     public function buildSignature(): string
     {
+        return static::signatureFor($this->purchasable_id, $this->type, $this->meta);
+    }
+
+    /**
+     * The signature for a line with the given identity, shared with the
+     * upgrade migration so legacy rows are signed exactly like new ones.
+     *
+     * @param  array<string, mixed>|null  $meta
+     */
+    public static function signatureFor(int|string|null $purchasableId, CartItemType $type, ?array $meta): string
+    {
         // The key is stored in a string column, so a line read back from the
         // database carries "42" where the purchasable handed in 42. Normalise
         // before hashing, or the signature would change on the first re-save
         // and later additions of the same product would stop combining.
         return hash('xxh128', (string) json_encode([
-            'purchasable_id' => $this->purchasable_id === null ? null : (string) $this->purchasable_id,
-            'type' => $this->type->value,
-            'meta' => $this->meta,
+            'purchasable_id' => $purchasableId === null ? null : (string) $purchasableId,
+            'type' => $type->value,
+            'meta' => $meta,
         ]));
     }
 
