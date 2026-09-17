@@ -8,6 +8,7 @@ use Marshmallow\Addressable\Models\Address;
 use Marshmallow\Datasets\Country\Models\Country;
 use Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand;
 use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
+use Marshmallow\Ecommerce\Cart\Listeners\ConvertPaidPaymentToOrder;
 use Marshmallow\Ecommerce\Cart\Listeners\DisconnectCartFromUser;
 use Marshmallow\Ecommerce\Cart\Listeners\MergeCartOnLogin;
 use Marshmallow\Ecommerce\Cart\Models\Customer;
@@ -87,16 +88,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Login / logout listeners
+    | Listeners
     |--------------------------------------------------------------------------
     |
     | Merge the guest cart into the user's existing open cart on login, and
-    | disconnect it on logout. Set either to an empty array to opt out.
+    | disconnect it on logout (both only for logins on `customer_guard`).
+    | `payment_paid` turns a settled payable payment into an order, built from
+    | the snapshot the payment was started with. Set any entry to an empty
+    | array to opt out.
     |
     */
     'listeners' => [
         'login' => [MergeCartOnLogin::class],
         'logout' => [DisconnectCartFromUser::class],
+        'payment_paid' => [ConvertPaidPaymentToOrder::class],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payments (marshmallow/payable)
+    |--------------------------------------------------------------------------
+    |
+    | `startPayment()` on a cart confirms it first, and payable freezes the
+    | cart's snapshot onto the payment. With `convert_on_paid` enabled the
+    | `payment_paid` listener creates the order from that snapshot as soon
+    | as the payment settles; disable it to convert from your own listener.
+    |
+    */
+    'payable' => [
+        'convert_on_paid' => true,
     ],
 
     /*
@@ -104,8 +124,11 @@ return [
     | Stock
     |--------------------------------------------------------------------------
     |
-    | Whether Purchasable::isAvailableForPurchase() is consulted when an item
-    | is added and again per line before an order is created.
+    | Whether Purchasable::isAvailableForPurchase() is consulted when a line is
+    | added or grows (`check_on_add`, with the line's total quantity) and again
+    | per line when the cart is confirmed for payment (`check_on_checkout`).
+    | After payment a shortage never blocks the order; it is reported through
+    | the StockShortageDetected event instead.
     |
     */
     'stock' => [
@@ -118,27 +141,17 @@ return [
     | Abandoned carts
     |--------------------------------------------------------------------------
     |
-    | A cart with no activity for `expires_after_days` counts as abandoned and
-    | fires CartAbandoned; one untouched for `delete_after_days` is pruned by
-    | the ecommerce:clean-carts command.
+    | A cart with no activity for `expires_after_days` is flagged as abandoned
+    | (firing CartAbandoned) when `flag_abandoned` is on; one untouched for
+    | `delete_after_days` is permanently pruned, lines and all, by the
+    | ecommerce:clean-carts command. Confirmed and converted carts are never
+    | touched.
     |
     */
     'abandoned' => [
         'expires_after_days' => 30,
         'delete_after_days' => 90,
-        'fire_events' => true,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Discounts
-    |--------------------------------------------------------------------------
-    */
-    'discount' => [
-        'voucher' => [
-            'min_length' => 8,
-            'exclude_rules' => ['Symbols', 'Lowercase', 'Similar'],
-        ],
+        'flag_abandoned' => true,
     ],
 
     /*

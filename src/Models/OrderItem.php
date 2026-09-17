@@ -4,19 +4,21 @@ declare(strict_types=1);
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Ecommerce\Cart\Concerns\CalculatesItemTotals;
+use Marshmallow\Ecommerce\Cart\Concerns\HasPurchasable;
 use Marshmallow\Ecommerce\Cart\Contracts\CartLine;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 
 /**
- * An immutable copy of a cart line, taken when an order is created.
+ * An immutable copy of a cart line, taken from the snapshot an order is
+ * created from.
  *
  * @property int $order_id
- * @property string|null $shopping_cart_item_id
+ * @property int|null $shopping_cart_item_id
+ * @property string|null $purchasable_type
  * @property int|string|null $purchasable_id
  * @property string $description
  * @property CartItemType $type
@@ -32,7 +34,7 @@ use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 class OrderItem extends Model implements CartLine
 {
     use CalculatesItemTotals;
-    use HasFactory;
+    use HasPurchasable;
     use SoftDeletes;
 
     protected $guarded = [];
@@ -57,10 +59,5 @@ class OrderItem extends Model implements CartLine
     public function order(): BelongsTo
     {
         return $this->belongsTo(config('cart.models.order'));
-    }
-
-    public function purchasable(): BelongsTo
-    {
-        return $this->belongsTo(config('cart.models.product'), 'purchasable_id');
     }
 }

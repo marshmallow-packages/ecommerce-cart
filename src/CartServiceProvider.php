@@ -8,7 +8,10 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand;
+use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
+use Marshmallow\Payable\Events\PaymentStatusPaid;
 
 class CartServiceProvider extends ServiceProvider
 {
@@ -22,11 +25,13 @@ class CartServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerMiddleware();
-        $this->registerAuthListeners();
+        $this->registerListeners();
         $this->loadJsonTranslationsFrom(__DIR__.'/../resources/lang');
 
         if ($this->app->runningInConsole()) {
             $this->bootConsole();
+        } else {
+            $this->assertConfigurationIsUsable();
         }
     }
 
@@ -37,7 +42,7 @@ class CartServiceProvider extends ServiceProvider
         $router->aliasMiddleware($alias, config('cart.middleware.class'));
     }
 
-    protected function registerAuthListeners(): void
+    protected function registerListeners(): void
     {
         /** @var Dispatcher $events */
         $events = $this->app['events'];
@@ -48,6 +53,26 @@ class CartServiceProvider extends ServiceProvider
 
         foreach ((array) config('cart.listeners.logout', []) as $listener) {
             $events->listen(Logout::class, $listener);
+        }
+
+        foreach ((array) config('cart.listeners.payment_paid', []) as $listener) {
+            $events->listen(PaymentStatusPaid::class, $listener);
+        }
+    }
+
+    /**
+     * Fail loudly on a request when the configured product model cannot be
+     * put in a cart, instead of on the first add() deep inside a checkout.
+     * Console runs are exempt so publishing and migrating always work.
+     */
+    protected function assertConfigurationIsUsable(): void
+    {
+        $product = config('cart.models.product');
+
+        if (is_string($product) && class_exists($product) && ! is_subclass_of($product, Purchasable::class)) {
+            throw new InvalidArgumentException(
+                "The configured cart product model [{$product}] must implement ".Purchasable::class.'.',
+            );
         }
     }
 
@@ -61,11 +86,13 @@ class CartServiceProvider extends ServiceProvider
             __DIR__.'/../config/cart.php' => config_path('cart.php'),
         ], 'cart-config');
 
-        $this->publishes([
+        // publishesMigrations() stamps each file with the publish time, so the
+        // package migrations sort after the host's own.
+        $this->publishesMigrations([
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'cart-migrations');
 
-        $this->publishes([
+        $this->publishesMigrations([
             __DIR__.'/../database/migrations-upgrade' => database_path('migrations'),
         ], 'cart-upgrade-migrations');
 

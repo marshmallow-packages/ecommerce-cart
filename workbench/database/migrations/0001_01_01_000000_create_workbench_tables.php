@@ -29,10 +29,18 @@ return new class extends Migration
             $table->json('price_tiers')->nullable();
             $table->timestamps();
         });
+
+        Schema::create('gift_cards', function (Blueprint $table): void {
+            $table->id();
+            $table->string('code');
+            $table->integer('value_cents');
+            $table->timestamps();
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('gift_cards');
         Schema::dropIfExists('products');
         Schema::dropIfExists('users');
     }

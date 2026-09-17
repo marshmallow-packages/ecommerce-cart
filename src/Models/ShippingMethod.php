@@ -6,11 +6,13 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Marshmallow\Ecommerce\Cart\Database\Factories\ShippingMethodFactory;
 use Marshmallow\Ecommerce\Cart\Support\Price;
 
 /**
@@ -18,6 +20,7 @@ use Marshmallow\Ecommerce\Cart\Support\Price;
  * cart line. Which method applies to a cart is decided by its conditions.
  *
  * @property string $name
+ * @property string|null $type
  * @property int $price_including_vat
  * @property int $price_excluding_vat
  * @property int $vat_amount
@@ -64,6 +67,11 @@ class ShippingMethod extends Model
             $method->vat_amount = $price->vatAmount();
             $method->currency = $price->currency;
         });
+    }
+
+    protected static function newFactory(): Factory
+    {
+        return ShippingMethodFactory::new();
     }
 
     public function toPrice(): Price

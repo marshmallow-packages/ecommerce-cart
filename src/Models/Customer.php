@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Marshmallow\Addressable\Traits\Addressable;
+use Marshmallow\Ecommerce\Cart\Database\Factories\CustomerFactory;
 
 /**
  * A known customer, promoted from a {@see Prospect} at checkout.
@@ -33,14 +35,27 @@ class Customer extends Model
 
     protected $guarded = [];
 
+    protected static function newFactory(): Factory
+    {
+        return CustomerFactory::new();
+    }
+
     public function getFullName(): string
     {
         return trim("{$this->first_name} {$this->last_name}");
     }
 
+    /**
+     * The customer's most recent cart.
+     */
     public function cart(): HasOne
     {
-        return $this->hasOne(config('cart.models.shopping_cart'), 'customer_id');
+        return $this->hasOne(config('cart.models.shopping_cart'), 'customer_id')->latestOfMany();
+    }
+
+    public function carts(): HasMany
+    {
+        return $this->hasMany(config('cart.models.shopping_cart'), 'customer_id');
     }
 
     public function orders(): HasMany

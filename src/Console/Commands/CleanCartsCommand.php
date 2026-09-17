@@ -32,7 +32,9 @@ class CleanCartsCommand extends Command
 
     protected function flagAbandoned(): int
     {
-        if (! config('cart.abandoned.fire_events', true)) {
+        // `fire_events` is the pre-6.1 name of this switch; a published config
+        // that still turns it off keeps working.
+        if (! config('cart.abandoned.flag_abandoned', true) || ! config('cart.abandoned.fire_events', true)) {
             return 0;
         }
 
@@ -72,8 +74,9 @@ class CleanCartsCommand extends Command
             ->withTrashed()
             ->where('updated_at', '<', $threshold)
             ->chunkById(200, function ($carts) use ($itemModel, &$count): void {
+                $itemModel::withTrashed()->whereIn('shopping_cart_id', $carts->modelKeys())->forceDelete();
+
                 foreach ($carts as $cart) {
-                    $itemModel::withTrashed()->where('shopping_cart_id', $cart->getKey())->forceDelete();
                     $cart->forceDelete();
                     $count++;
                 }
@@ -103,12 +106,15 @@ class CleanCartsCommand extends Command
     }
 
     /**
+     * Carts that never went to payment: a confirmed or converted cart belongs
+     * to a payment or an order and is left alone.
+     *
      * @return Builder<ShoppingCart>
      */
     protected function openCarts(): Builder
     {
         $cartModel = config('cart.models.shopping_cart');
 
-        return $cartModel::query()->whereNull('confirmed_at');
+        return $cartModel::query()->whereNull('confirmed_at')->whereNull('converted_at');
     }
 }

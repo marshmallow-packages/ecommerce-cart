@@ -20,7 +20,8 @@
         }
     ],
     "support": {
-        "email": "stef@marshmallow.dev"
+        "email": "stef@marshmallow.dev",
+        "issues": "https://github.com/marshmallow-packages/ecommerce-cart/issues"
     },
     "require": {
         "php": "^8.3",
@@ -34,7 +35,7 @@
         "illuminate/support": "^12.0 || ^13.0",
         "marshmallow/addressable": "^1.8",
         "marshmallow/dataset-country": "^1.3",
-        "marshmallow/payable": "^4.0"
+        "marshmallow/payable": "^4.3"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
@@ -45,13 +46,13 @@
     },
     "autoload": {
         "psr-4": {
-            "Marshmallow\\Ecommerce\\Cart\\": "src"
+            "Marshmallow\\Ecommerce\\Cart\\": "src",
+            "Marshmallow\\Ecommerce\\Cart\\Database\\Factories\\": "database/factories"
         }
     },
     "autoload-dev": {
         "psr-4": {
             "Marshmallow\\Ecommerce\\Cart\\Tests\\": "tests",
-            "Marshmallow\\Ecommerce\\Cart\\Database\\Factories\\": "database/factories",
             "Workbench\\App\\": "workbench/app",
             "Workbench\\Database\\Factories\\": "workbench/database/factories"
         }
@@ -69,8 +70,6 @@
             "pestphp/pest-plugin": true
         }
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "extra": {
         "laravel": {
             "providers": [
