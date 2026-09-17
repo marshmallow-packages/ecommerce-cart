@@ -77,6 +77,17 @@ it('skips the availability check on confirm when disabled', function (): void {
     expect($cart->fresh()->confirm()->isConfirmed())->toBeTrue();
 });
 
+it('skips the stock check for caller-priced lines and vanished products', function (): void {
+    $product = productPriced(1000, 21.0, ['stock' => 0]);
+    $cart = ShoppingCart::completelyNew();
+    $cart->addCustom('Bundel', Price::fromGross(400, 21), Marshmallow\Ecommerce\Cart\Enums\CartItemType::Product, purchasable: $product, quantity: 2);
+    $gone = productPriced(500);
+    $cart->fresh()->add($gone, 1);
+    $gone->delete();
+
+    expect($cart->fresh()->confirm()->isConfirmed())->toBeTrue();
+});
+
 it('re-validates every voucher with what is known at confirmation', function (): void {
     // The code was applied before the customer identified themselves; by
     // confirmation the e-mail is known and the once-per-customer rule bites.

@@ -202,6 +202,42 @@ it('accepts a first-generation snapshot without net amounts or totals', function
         ->and($order->customerSnapshot())->toBe([]);
 });
 
+it('converts a cart directly from a snapshot taken on the spot', function (): void {
+    $cart = checkoutReadyCart(1000);
+
+    $order = Order::createFromShoppingCart($cart);
+
+    expect($order->total_including_vat)->toBe(1000)
+        ->and($cart->fresh()->isConverted())->toBeTrue();
+});
+
+it('keeps a voucher whose discount was deleted after payment without reporting it', function (): void {
+    Event::fake([DiscountInvalidAtConversion::class]);
+    $discount = Discount::factory()->create(['discount_code' => 'WEG', 'fixed_amount' => 100]);
+    $cart = checkoutReadyCart(10000);
+    $cart->applyDiscount($discount);
+    $snapshot = $cart->fresh()->getPayableSnapshot();
+    $discount->forceDelete();
+
+    $order = Order::createFromSnapshot($snapshot, $cart->fresh());
+
+    expect($order->discount_including_vat)->toBe(-100);
+    Event::assertNotDispatched(DiscountInvalidAtConversion::class);
+});
+
+it('converts a line whose purchasable class no longer exists without a shortage report', function (): void {
+    Event::fake([Marshmallow\Ecommerce\Cart\Events\StockShortageDetected::class]);
+    $cart = checkoutReadyCart(1000);
+    $snapshot = $cart->getPayableSnapshot();
+    $snapshot['lines'][0]['purchasable_type'] = 'App\\Models\\Gone';
+
+    $order = Order::createFromSnapshot($snapshot, $cart);
+
+    expect($order->items->sole()->purchasable_type)->toBe('App\\Models\\Gone')
+        ->and($order->items->sole()->resolvePurchasable())->toBeNull();
+    Event::assertNotDispatched(Marshmallow\Ecommerce\Cart\Events\StockShortageDetected::class);
+});
+
 it('stamps the cart as confirmed and converted in one go', function (): void {
     $cart = checkoutReadyCart();
 

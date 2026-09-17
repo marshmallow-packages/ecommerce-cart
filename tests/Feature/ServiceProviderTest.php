@@ -104,18 +104,16 @@ it('wires the payment listener and lets a host opt out', function (): void {
     expect(Event::hasListeners(PaymentStatusPaid::class))->toBeFalse();
 });
 
-it('refuses a product model that is not purchasable on a web request', function (): void {
+it('refuses a product model that is not purchasable', function (): void {
     config()->set('cart.models.product', User::class);
-    $provider = new CartServiceProvider(app());
-    $method = new ReflectionMethod($provider, 'assertConfigurationIsUsable');
 
-    expect(fn () => $method->invoke($provider))->toThrow(InvalidArgumentException::class, 'must implement');
+    expect(fn () => CartFacade::assertConfigurationIsUsable())->toThrow(InvalidArgumentException::class, 'must implement');
 
     config()->set('cart.models.product', Product::class);
-    $method->invoke($provider);
+    CartFacade::assertConfigurationIsUsable();
 
     config()->set('cart.models.product', 'App\\Models\\DoesNotExist');
-    $method->invoke($provider);
+    CartFacade::assertConfigurationIsUsable();
 });
 
 it('publishes migrations through the timestamped migration publisher', function (): void {

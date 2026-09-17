@@ -22,6 +22,8 @@ class CartMiddleware
             return $next($request);
         }
 
+        Cart::assertConfigurationIsUsable();
+
         $cartModel = config('cart.models.shopping_cart');
         $cart = $cartModel::getBySession() ?? new $cartModel;
 

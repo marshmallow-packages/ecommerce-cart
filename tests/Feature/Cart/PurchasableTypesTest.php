@@ -60,6 +60,13 @@ it('falls back to the configured product model for a line without a type', funct
         ->and($line->fresh()->resolvePurchasable()?->is($product))->toBeTrue();
 });
 
+it('resolves no purchasable for a custom line', function (): void {
+    $line = ShoppingCart::completelyNew()->addCustom('Gravure', Price::fromGross(500, 21), CartItemType::Product);
+
+    expect($line->purchasable_type)->toBeNull()
+        ->and($line->fresh()->resolvePurchasable())->toBeNull();
+});
+
 it('stores the class name for a purchasable that is not an eloquent model', function (): void {
     $purchasable = new class implements Purchasable
     {

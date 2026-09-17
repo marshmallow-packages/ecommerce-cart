@@ -119,6 +119,12 @@ it('keeps the request cart valid once the visitor adds something', function (): 
         ->and(ShoppingCart::count())->toBe(1);
 });
 
+it('refuses to serve a storefront request with a product model that is not purchasable', function (): void {
+    config()->set('cart.models.product', Workbench\App\Models\User::class);
+
+    expect(fn () => runMiddleware(storefrontRequest()))->toThrow(InvalidArgumentException::class, 'must implement');
+});
+
 it('replaces a converted cart with a fresh one', function (): void {
     $cart = checkoutReadyCart();
     $cart->convertToOrder();

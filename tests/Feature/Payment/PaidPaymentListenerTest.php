@@ -179,6 +179,16 @@ it('ignores payments for payables that are not carts', function (): void {
     expect(Order::count())->toBe(0);
 });
 
+it('ignores a payment whose cart is gone', function (): void {
+    $cart = checkoutReadyCart(1000);
+    $payment = paymentFor($cart, $cart->getPayableSnapshot(), total: 1000, paid: 1000);
+    $cart->forceDelete();
+
+    event(new PaymentStatusPaid($payment->fresh()));
+
+    expect(Order::count())->toBe(0);
+});
+
 it('handles a webhook that fires twice by returning the same order', function (): void {
     $cart = checkoutReadyCart(1000);
     $payment = $cart->startPayment(idealType(), is_custom: true);

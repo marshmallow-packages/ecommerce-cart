@@ -26,6 +26,14 @@ it('links the signed-in user and their customer when a cart is minted', function
         ->and($cart->prospect_id)->not->toBeNull();
 });
 
+it('exposes the user it belongs to', function (): void {
+    $user = User::factory()->create();
+    $cart = ShoppingCart::completelyNew();
+    $cart->connectUser($user);
+
+    expect($cart->fresh()->user->is($user))->toBeTrue();
+});
+
 it('leaves the customer empty for a signed-in user without one', function (): void {
     $this->actingAs(User::factory()->create());
 
