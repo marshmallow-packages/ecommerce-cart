@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Event;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Enums\OrderStatus;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
-use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
+use Marshmallow\Ecommerce\Cart\Events\StockShortageDetected;
 use Marshmallow\Ecommerce\Cart\Models\Customer;
 use Marshmallow\Ecommerce\Cart\Models\Discount;
 use Marshmallow\Ecommerce\Cart\Models\Order;
@@ -129,23 +129,34 @@ it('reuses the cart customer when one is already set', function (): void {
     expect($order->customer_id)->toBe($customer->id);
 });
 
-it('refuses to convert when a line is no longer available', function (): void {
-    $product = Product::factory()->create(['price_cents' => 1000]);
+it('still converts when a line sold out after payment, and reports the shortage', function (): void {
+    Event::fake([StockShortageDetected::class]);
+    $product = Product::factory()->create(['price_cents' => 1000, 'name' => 'Laatste stuk']);
     $cart = ShoppingCart::completelyNew();
-    $cart->add($product, 1);
+    $cart->add($product, 2);
     $product->update(['stock' => 0]);
 
-    expect(fn () => $cart->fresh()->convertToOrder())->toThrow(PurchasableUnavailableException::class);
+    $order = $cart->fresh()->convertToOrder();
+
+    expect($order)->toBeInstanceOf(Order::class)
+        ->and($order->items->firstWhere('type', CartItemType::Product)->quantity)->toBe(2);
+    Event::assertDispatched(StockShortageDetected::class, fn (StockShortageDetected $e): bool => $e->order->is($order)
+        && count($e->shortages) === 1
+        && $e->shortages[0]['description'] === 'Laatste stuk'
+        && $e->shortages[0]['quantity'] === 2
+        && (string) $e->shortages[0]['purchasable_id'] === (string) $product->id);
 });
 
-it('skips the availability check at checkout when disabled', function (): void {
+it('skips the shortage report at conversion when the checkout check is disabled', function (): void {
     config()->set('cart.stock.check_on_checkout', false);
+    Event::fake([StockShortageDetected::class]);
     $product = Product::factory()->create(['price_cents' => 1000]);
     $cart = ShoppingCart::completelyNew();
     $cart->add($product, 1);
     $product->update(['stock' => 0]);
 
     expect($cart->fresh()->convertToOrder())->toBeInstanceOf(Order::class);
+    Event::assertNotDispatched(StockShortageDetected::class);
 });
 
 it('copies order item snapshots including type', function (): void {

@@ -11,9 +11,13 @@ use Marshmallow\Ecommerce\Cart\Cart;
 use Marshmallow\Ecommerce\Cart\CartServiceProvider;
 use Marshmallow\Ecommerce\Cart\Facades\Cart as CartFacade;
 use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
+use Marshmallow\Ecommerce\Cart\Listeners\ConvertPaidPaymentToOrder;
 use Marshmallow\Ecommerce\Cart\Listeners\DisconnectCartFromUser;
 use Marshmallow\Ecommerce\Cart\Listeners\MergeCartOnLogin;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Marshmallow\Payable\Events\PaymentStatusPaid;
+use Workbench\App\Models\Product;
+use Workbench\App\Models\User;
 
 it('binds the cart manager as a singleton', function (): void {
     expect(app(Cart::class))->toBeInstanceOf(Cart::class)
@@ -72,7 +76,9 @@ it('merges sensible defaults into the config', function (): void {
         ->and(config('cart.default_vat_percentage'))->toBe(21.0)
         ->and(config('cart.customer_guard'))->toBe('web')
         ->and(config('cart.stock'))->toBe(['check_on_add' => true, 'check_on_checkout' => true])
-        ->and(config('cart.abandoned'))->toBe(['expires_after_days' => 30, 'delete_after_days' => 90, 'fire_events' => true])
+        ->and(config('cart.abandoned'))->toBe(['expires_after_days' => 30, 'delete_after_days' => 90, 'flag_abandoned' => true])
+        ->and(config('cart.payable'))->toBe(['convert_on_paid' => true])
+        ->and(config('cart.listeners.payment_paid'))->toBe([ConvertPaidPaymentToOrder::class])
         ->and(config('cart.models'))->toHaveKeys([
             'user', 'product', 'prospect', 'customer', 'discount', 'shopping_cart', 'shopping_cart_item',
             'order', 'order_item', 'shipping_method', 'shipping_method_condition', 'address', 'country',
@@ -86,4 +92,35 @@ it('ships Dutch translations for the customer-facing strings', function (): void
     expect(__('Order'))->toBe('Bestelling')
         ->and(__('This voucher cannot be used with the items in your shopping cart.'))
         ->toBe('Deze kortingscode kan niet worden gebruikt met de artikelen in je winkelmand.');
+});
+
+it('wires the payment listener and lets a host opt out', function (): void {
+    expect(Event::hasListeners(PaymentStatusPaid::class))->toBeTrue();
+
+    Event::forget(PaymentStatusPaid::class);
+    config()->set('cart.listeners.payment_paid', []);
+    (new CartServiceProvider(app()))->boot();
+
+    expect(Event::hasListeners(PaymentStatusPaid::class))->toBeFalse();
+});
+
+it('refuses a product model that is not purchasable on a web request', function (): void {
+    config()->set('cart.models.product', User::class);
+    $provider = new CartServiceProvider(app());
+    $method = new ReflectionMethod($provider, 'assertConfigurationIsUsable');
+
+    expect(fn () => $method->invoke($provider))->toThrow(InvalidArgumentException::class, 'must implement');
+
+    config()->set('cart.models.product', Product::class);
+    $method->invoke($provider);
+
+    config()->set('cart.models.product', 'App\\Models\\DoesNotExist');
+    $method->invoke($provider);
+});
+
+it('publishes migrations through the timestamped migration publisher', function (): void {
+    $paths = ServiceProvider::pathsToPublish(CartServiceProvider::class, 'cart-migrations');
+
+    expect($paths)->not->toBeEmpty()
+        ->and(array_key_first($paths))->toEndWith('database/migrations');
 });

@@ -46,8 +46,8 @@ it('does not flag a cart twice', function (): void {
     Event::assertNotDispatched(CartAbandoned::class);
 });
 
-it('skips abandonment events when disabled but still prunes', function (): void {
-    config()->set('cart.abandoned.fire_events', false);
+it('skips abandonment flagging when disabled but still prunes', function (string $key): void {
+    config()->set("cart.abandoned.{$key}", false);
     Event::fake([CartAbandoned::class]);
     $quiet = quietCart(40);
     $expired = quietCart(120);
@@ -59,7 +59,7 @@ it('skips abandonment events when disabled but still prunes', function (): void 
     Event::assertNotDispatched(CartAbandoned::class);
     expect($quiet->fresh()->abandoned_at)->toBeNull()
         ->and(ShoppingCart::withTrashed()->find($expired->id))->toBeNull();
-});
+})->with(['flag_abandoned', 'fire_events (pre-6.1 name)' => 'fire_events']);
 
 it('prunes carts older than the delete threshold for good, lines included', function (): void {
     $cart = quietCart(120);

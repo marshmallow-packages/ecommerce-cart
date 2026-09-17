@@ -65,7 +65,8 @@ it('keeps display ids unique across soft-deleted carts', function (): void {
 });
 
 it('respects an explicit display id and key', function (): void {
-    $cart = ShoppingCart::create(['id' => '11111111-1111-4111-8111-111111111111', 'display_id' => 500]);
+    $cart = (new ShoppingCart)->forceFill(['id' => '11111111-1111-4111-8111-111111111111', 'display_id' => 500]);
+    $cart->save();
 
     expect($cart->id)->toBe('11111111-1111-4111-8111-111111111111')
         ->and($cart->display_id)->toBe(500)
@@ -174,7 +175,7 @@ it('returns the latest open cart of a user, ignoring confirmed and foreign carts
 
     $this->travel(1)->days();
     $confirmed = ShoppingCart::completelyNew();
-    $confirmed->update(['user_id' => $user->id, 'confirmed_at' => now()]);
+    $confirmed->forceFill(['user_id' => $user->id, 'confirmed_at' => now()])->save();
 
     $foreign = ShoppingCart::completelyNew();
     $foreign->update(['user_id' => $other->id]);
@@ -199,7 +200,8 @@ it('is open until confirmed for payment', function (): void {
 
     expect($cart->isOpen())->toBeTrue();
 
-    $cart->update(['confirmed_at' => now()]);
+    $cart->add(productPriced(100), 1);
+    $cart->fresh()->confirm();
 
     expect($cart->fresh()->isOpen())->toBeFalse()
         ->and($cart->fresh()->confirmed_at)->toBeInstanceOf(Carbon::class);

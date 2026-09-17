@@ -18,12 +18,16 @@ use Workbench\App\Models\Product;
 |--------------------------------------------------------------------------
 */
 
-it('clamps a quantity of zero or less to one', function (int $requested): void {
-    $item = ShoppingCart::completelyNew()->add(productPriced(1000), 3);
+it('removes the line when the quantity is set to zero or less', function (int $requested): void {
+    Event::fake([ItemRemoved::class]);
+    $cart = ShoppingCart::completelyNew();
+    $item = $cart->add(productPriced(1000), 3);
 
     $item->setQuantity($requested);
 
-    expect($item->fresh()->quantity)->toBe(1);
+    expect(ShoppingCartItem::find($item->id))->toBeNull()
+        ->and($cart->fresh()->productItems())->toHaveCount(0);
+    Event::assertDispatched(ItemRemoved::class);
 })->with([0, -1, -100]);
 
 it('steps the quantity by one by default', function (): void {
@@ -195,7 +199,7 @@ it('passes the requested quantity and the cart to the availability hook', functi
             return 'Hooked';
         }
 
-        public function getPurchasablePrice(int $quantity = 1): Price
+        public function getPurchasablePrice(int $quantity = 1, ?ShoppingCart $cart = null): Price
         {
             return Price::fromGross(100, 21.0, 'EUR');
         }

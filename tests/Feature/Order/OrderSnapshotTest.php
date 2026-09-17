@@ -8,7 +8,7 @@ use Marshmallow\Addressable\Models\AddressType;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Enums\OrderStatus;
 use Marshmallow\Ecommerce\Cart\Events\OrderCreated;
-use Marshmallow\Ecommerce\Cart\Exceptions\PurchasableUnavailableException;
+use Marshmallow\Ecommerce\Cart\Exceptions\PaymentAmountMismatchException;
 use Marshmallow\Ecommerce\Cart\Models\Discount;
 use Marshmallow\Ecommerce\Cart\Models\Order;
 use Marshmallow\Ecommerce\Cart\Models\OrderItem;
@@ -132,17 +132,15 @@ it('takes the currency from the lines', function (): void {
     expect($cart->fresh()->convertToOrder()->currency)->toBe('USD');
 });
 
-it('writes no order at all when a line turns out to be unavailable', function (): void {
-    $product = productPriced(1000);
-    $cart = ShoppingCart::completelyNew();
-    $cart->add(productPriced(500), 1);
-    $cart->add($product, 1);
-    $product->update(['stock' => 0]);
+it('writes no order at all when the snapshot does not reconcile', function (): void {
+    $cart = checkoutReadyCart(1000);
+    $snapshot = $cart->getPayableSnapshot();
+    $snapshot['total_amount'] = 999; // tampered: lines say 1000
 
-    expect(fn () => $cart->fresh()->convertToOrder())->toThrow(PurchasableUnavailableException::class)
+    expect(fn () => Order::createFromSnapshot($snapshot, $cart))->toThrow(PaymentAmountMismatchException::class)
         ->and(Order::count())->toBe(0)
         ->and(OrderItem::count())->toBe(0)
-        ->and($cart->fresh()->prospect->converted_at)->toBeNull();
+        ->and($cart->fresh()->converted_at)->toBeNull();
 });
 
 it('lets a line whose product vanished through the availability check', function (): void {

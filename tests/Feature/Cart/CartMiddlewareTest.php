@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
 use Marshmallow\Ecommerce\Cart\Http\Middleware\CartMiddleware;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
+use Workbench\App\Models\Product;
 
 function runMiddleware(Request $request): Request
 {
@@ -61,7 +62,7 @@ it('exposes the attached cart through the facade', function (): void {
 
 it('replaces a confirmed cart with a fresh one sharing the prospect', function (): void {
     $cart = ShoppingCart::completelyNew();
-    $cart->update(['confirmed_at' => now()]);
+    $cart->forceFill(['confirmed_at' => now()])->save();
 
     $passed = runMiddleware(storefrontRequest());
 
@@ -104,3 +105,26 @@ it('treats an empty or missing exclusion list as excluding nothing', function (m
     'empty' => [[]],
     'null' => [null],
 ]);
+
+it('keeps the request cart valid once the visitor adds something', function (): void {
+    $request = storefrontRequest();
+    runMiddleware($request);
+    app()->instance('request', $request);
+
+    $cart = Cart::getFromRequest();
+    $cart->add(Product::factory()->create(), 1);
+
+    expect(Cart::getFromRequest()->exists)->toBeTrue()
+        ->and(Cart::getFromRequest()->is(ShoppingCart::getBySession()))->toBeTrue()
+        ->and(ShoppingCart::count())->toBe(1);
+});
+
+it('replaces a converted cart with a fresh one', function (): void {
+    $cart = checkoutReadyCart();
+    $cart->convertToOrder();
+
+    $passed = runMiddleware(storefrontRequest());
+
+    expect($passed->attributes->get('cart')->is($cart))->toBeFalse()
+        ->and($passed->attributes->get('cart')->isOpen())->toBeTrue();
+});
