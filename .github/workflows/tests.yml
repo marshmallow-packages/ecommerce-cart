@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['8.3', '8.4']
+        php-version: ['8.3', '8.4', '8.5']
         laravel: ['12.*', '13.*']
 
     name: PHP ${{ matrix.php-version }} / Laravel ${{ matrix.laravel }}
@@ -39,6 +39,9 @@ jobs:
         run: |
           composer require "illuminate/support:${{ matrix.laravel }}" --no-interaction --no-update
           composer update --no-interaction --prefer-dist
+
+      - name: Audit Dependencies
+        run: composer audit --no-interaction
 
       - name: Check Code Style
         run: vendor/bin/pint --test

@@ -1,4 +1,24 @@
-# Upgrading to the Nova-free major
+# Upgrading
+
+## 6.0 to 6.1
+
+6.1 is additive on the schema but changes a few behaviours and one interface
+method. The complete, ordered checklist — including which code to change in
+your project — lives in [CHANGELOG.md](CHANGELOG.md#upgrading-from-60--what-to-change-in-your-project).
+In short:
+
+1. `composer update marshmallow/cart marshmallow/payable`, publish the
+   migrations (`--tag=cart-migrations`) and run `php artisan migrate`.
+2. Add `?ShoppingCart $cart = null` to your `getPurchasablePrice()`.
+3. Call `$cart->confirm()` before redirecting to the payment provider (or use
+   `$cart->startPayment()`), and `reopen()` after a failed payment.
+4. Remove your own paid-webhook conversion or switch it to
+   `Order::createFromSnapshot($payment->payable_snapshot, $cart, $payment)`.
+5. Listen for `StockShortageDetected`, `DiscountInvalidAtConversion`,
+   `PaymentSnapshotMismatch` and `DuplicatePaymentDetected`.
+6. Read order facts from `$order->customerSnapshot()` and friends.
+
+## 5.x to 6.0 (the Nova-free major)
 
 This is a major, breaking release over every Nova-based version (up to and including 5.x). It removes the dependency on Laravel Nova and the priceable/products packages from the core, replaces the priceable-backed pricing with a self-contained `Price` value object, and moves the admin resources out into a separate companion package.
 
