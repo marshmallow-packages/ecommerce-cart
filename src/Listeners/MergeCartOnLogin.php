@@ -15,12 +15,18 @@ use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
  *
  * If the user has no open cart the guest cart simply becomes theirs. If they do
  * have one, the guest cart's lines are merged into it so nothing the visitor
- * gathered before signing in is lost.
+ * gathered before signing in is lost. Only a login on the storefront guard
+ * counts: an admin signing into another guard in the same browser must not
+ * touch the customer's cart.
  */
 class MergeCartOnLogin
 {
     public function handle(Login $event): void
     {
+        if ($event->guard !== Cart::getUserGuard()) {
+            return;
+        }
+
         /** @var Model $user */
         $user = $event->user;
 

@@ -6,39 +6,27 @@
 [![Tests](https://img.shields.io/github/actions/workflow/status/marshmallow-packages/ecommerce-cart/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/marshmallow-packages/ecommerce-cart/actions/workflows/tests.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/marshmallow/cart.svg?style=flat-square)](https://packagist.org/packages/marshmallow/cart)
 
-Framework-agnostic e-commerce cart, order and discount engine for Laravel. This major drops every hard dependency on an admin panel — there is no Nova (or Filament) requirement in the core — so the same cart logic powers a storefront regardless of how the shop is administered.
+A cart, order and discount engine for Laravel storefronts. The core has no admin-panel dependency (no Nova, no Filament); it builds on `marshmallow/payable` for payments and `marshmallow/addressable` for addresses.
 
-- A session-backed **shopping cart** with line combining, quantity handling and per-line price snapshots.
+- A session-backed **shopping cart** with line combining, quantity handling, per-line price snapshots and an explicit **confirm → pay → convert** lifecycle.
 - An immutable **`Price`** value object: integer cents, VAT-inclusive canonical, with `net + vat === gross` guaranteed.
-- **Discounts** (fixed amount, percentage, free shipping) with prerequisites, eligibility rules and usage limits.
+- **Discounts** (fixed amount, percentage, free shipping) with prerequisites, eligibility rules, usage limits and stacking, booked per VAT rate.
 - **Shipping methods** the customer picks, priced with a free-over-threshold, plus **fee lines** for payment surcharges.
-- **Orders** created from a paid cart as an immutable financial record, idempotent on the cart id, with guarded status transitions.
+- **Orders** built from the snapshot a payment was started with — lines, customer, addresses, shipping method and vouchers frozen onto the order — idempotent on the cart id, with guarded status transitions.
 - A full **event stream**, **stock hooks**, **cart merge on login** and **abandoned-cart housekeeping**.
 
-Requires PHP `^8.3` and Laravel `^12.0 || ^13.0`.
+Requires PHP `^8.3`, Laravel `^12.0 || ^13.0` and `marshmallow/payable ^4.3`.
 
 ## Installation
 
-Install the package via Composer:
-
 ```bash
 composer require marshmallow/cart
-```
-
-Publish the config file:
-
-```bash
 php artisan vendor:publish --tag="cart-config"
-```
-
-Publish and run the migrations:
-
-```bash
 php artisan vendor:publish --tag="cart-migrations"
 php artisan migrate
 ```
 
-Coming from a Nova-based release? Publish the guarded upgrade migration instead and read [UPGRADE.md](UPGRADE.md):
+Coming from a Nova-based release (5.x)? Publish the guarded upgrade migration as well and read [UPGRADE.md](UPGRADE.md):
 
 ```bash
 php artisan vendor:publish --tag="cart-upgrade-migrations"
@@ -53,28 +41,30 @@ Route::middleware('cart')->group(function () {
 });
 ```
 
+Inside those routes the cart is available as `Cart::getFromRequest()` (or `$request->attributes->get('cart')`). A visitor without a cart gets an unsaved one; it persists itself on the first `add()`, so nothing is written for bots and bounces.
+
 ## Configuration
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `models` | package models | Every model the cart touches, swappable per entry. `product` must point at a model implementing `Purchasable`. |
-| `currency` | `EUR` | ISO 4217 code stamped onto `Price` value objects. |
+| `models` | package models | Every model the cart touches, swappable per entry with a subclass. `product` is the fallback model for lines without a purchasable type and must implement `Purchasable`. |
+| `currency` | `EUR` | ISO 4217 code stamped onto `Price` value objects. A cart holds one currency. |
 | `locale` | `nl_NL` | Locale for the money formatter. |
 | `prices_include_vat` | `true` | Whether back-office prices are entered gross. The `Price` object is gross-canonical either way. |
-| `default_vat_percentage` | `21.0` | Rate a discount line inherits when the cart mixes VAT rates. |
-| `customer_guard` | `web` | Guard used to connect a signed-in user to the cart. |
+| `default_vat_percentage` | `21.0` | Rate a zero-valued discount line falls back to. |
+| `customer_guard` | `web` | Guard whose logins and logouts touch the cart. |
 | `middleware` | alias `cart`, no exclusions | Middleware class, alias and the request paths it should skip. |
-| `listeners` | merge / disconnect | Login and logout listeners; set to `[]` to opt out. |
-| `stock` | both `true` | Whether `Purchasable::isAvailableForPurchase()` runs on add and again at checkout. |
-| `abandoned` | 30 / 90 days | Days until a quiet cart counts as abandoned, and until it is pruned. |
-| `discount.voucher` | length 8 | Generated voucher shape. |
+| `listeners` | merge / disconnect / convert | Login, logout and `payment_paid` listeners; set any to `[]` to opt out. |
+| `payable.convert_on_paid` | `true` | Create the order from the payment snapshot when payable reports a payment paid. |
+| `stock` | both `true` | `check_on_add`: consult `isAvailableForPurchase()` when a line is added or grows. `check_on_checkout`: check every line in `confirm()` and report shortages after payment. |
+| `abandoned` | 30 / 90 days | Days until a quiet cart is flagged as abandoned (`flag_abandoned`), and until it is permanently pruned. |
 | `commands` | `CleanCartsCommand` | The housekeeping command class. |
 
 ## Usage
 
 ### Make your product purchasable
 
-The cart never reaches into your product model directly. Point `config('cart.models.product')` at your model and implement the four-method contract:
+The cart never reaches into your product model directly. Implement the four-method contract on any Eloquent model — a product, a subscription, a gift card; the cart stores the model's morph type next to its key, so one cart can hold lines from several models:
 
 ```php
 use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
@@ -93,7 +83,7 @@ class Product extends Model implements Purchasable
         return $this->name;
     }
 
-    public function getPurchasablePrice(int $quantity = 1): Price
+    public function getPurchasablePrice(int $quantity = 1, ?ShoppingCart $cart = null): Price
     {
         return Price::fromGross($this->price_cents, 21.0, 'EUR');
     }
@@ -105,9 +95,9 @@ class Product extends Model implements Purchasable
 }
 ```
 
-Implement `HasPurchasableCategories` as well when you want discounts scoped to categories.
+Implement `HasPurchasableCategories` as well when you want discounts scoped to categories. Point `config('cart.models.product')` at your main product model; it is the fallback for lines written before purchasable types existed.
 
-The `$quantity` on `getPurchasablePrice()` is your tiered-pricing hook: return a different unit price for larger quantities and the cart follows it automatically — on add, and again whenever a line's quantity crosses a tier. Lines added with a caller-chosen price (`addCustom()`) are never repriced.
+`getPurchasablePrice()` is your pricing hook: `$quantity` for tiered prices (the cart re-asks whenever a line's quantity changes) and `$cart` for customer-specific price lists. `isAvailableForPurchase()` receives the line's total quantity when a line is added or grows, and again per line in `confirm()`. Lines added with a caller-chosen price (`addCustom()`) are never repriced or stock-checked.
 
 ### Work with the cart
 
@@ -115,48 +105,69 @@ The `$quantity` on `getPurchasablePrice()` is your tiered-pricing hook: return a
 use Marshmallow\Ecommerce\Cart\Facades\Cart;
 
 $cart = Cart::get();
-$cart->add($product, quantity: 2);
+$line = $cart->add($product, quantity: 2);
 $cart->add($product, quantity: 1, meta: ['size' => 'L']); // meta makes it a separate line
 
-$cart->applyDiscount($discount);   // throws DiscountException when not allowed
-$cart->removeDiscount('CODE');     // one code; no argument clears them all
+$cart->setQuantity($line, 5);        // 0 removes the line
+$cart->remove($line);
+$cart->clear();
 
-$cart->getSubtotal();              // product lines, gross cents
-$cart->getTotalAmount();           // grand total incl. shipping, discount and fees
+$cart->applyDiscount($discount);      // throws DiscountException when not allowed
+$cart->removeDiscount('CODE');        // one code; no argument clears them all
+$cart->discounts();                   // the applied Discount models
+
+$cart->getSubtotal();                 // product lines, gross cents
+$cart->getTotalAmount();              // grand total incl. shipping, discount and fees
 $cart->getTotalVatAmount();
-
-$order = $cart->convertToOrder();  // once the cart is paid for — idempotent
 ```
 
-Every line in a cart shares one currency: adding a line in another currency throws `CurrencyMismatchException`, and a cart without product lines cannot become an order (`EmptyCartException`). A shipping method the customer picked stays selected through cart changes for as long as it is still active and its conditions fit the cart.
+Every line in a cart shares one currency; a line in another currency throws `CurrencyMismatchException`.
 
-Discounts stack when every code involved is marked `is_combinable`; a percentage code then compounds over the already-discounted subtotal. A non-combinable code replaces whatever is applied (and vice versa), the same code is refused twice, and every applied code is re-evaluated on each cart change — a code that no longer qualifies drops off.
+Discounts stack when every code involved is marked `is_combinable`; a percentage code then compounds over the already-discounted subtotal. A non-combinable code replaces whatever is applied (and vice versa), the same code is refused twice, and every applied code is re-evaluated on each cart change — a code that no longer qualifies drops off. Applying a code is transactional, so a rejected replacement leaves the existing codes untouched. A discount books one negative line per VAT rate it spans (pro rata, cent-exact), so the VAT on the discount mirrors the VAT on what it discounts; a free-shipping code follows the shipping line's rate.
 
-### Locking and payment integrity
-
-Freeze the cart the moment the customer leaves for the payment provider by setting `confirmed_at`. Every mutation on a confirmed cart — adding, quantity changes, deleting lines, fees, shipping — throws `CartLockedException`; clear `confirmed_at` to reopen it after a failed payment. When the provider reports back, pass the amount that was actually paid so a tampered or stale cart can never become an order for the wrong total:
+### Checkout: confirm, pay, convert
 
 ```php
-$order = $cart->convertToOrder(expectedTotalAmount: $payment->total_amount);
-// throws PaymentAmountMismatchException on a single cent of difference
+$cart->confirm();   // freeze the cart for payment; throws while the customer can still act
+$cart->reopen();    // after a failed or canceled payment
 ```
 
-An open cart can also re-ask every purchasable for its current price — for example when a customer returns to a cart that sat overnight:
+`confirm()` refuses an empty cart (`EmptyCartException`), a line whose purchasable can no longer supply its quantity (`PurchasableUnavailableException`) and a voucher that no longer qualifies with what is known by now — usage limits, once-per-customer with the customer's e-mail (`DiscountException`). It throws and leaves the cart open, so the storefront can show the message. Once confirmed, every mutation throws `CartLockedException`; addresses and the note are covered too.
+
+With `marshmallow/payable` the cart *is* the payable:
+
+```php
+$url = $cart->startPayment($paymentType); // confirms first, then hands the customer to the provider
+```
+
+Payable freezes `$cart->getPayableSnapshot()` onto the payment the moment it starts. When the provider reports the payment paid, the package's `ConvertPaidPaymentToOrder` listener creates the order **from that snapshot** — never from the live cart. A cart that was reopened and changed after the payment started cannot leak into the order; a paid amount that does not match the snapshot creates no order and fires `PaymentSnapshotMismatch`; a second payment for an already converted cart returns the existing order and fires `DuplicatePaymentDetected` so you can refund it.
+
+Without payable, convert yourself once you know the payment settled:
+
+```php
+$order = $cart->convertToOrder(expectedTotalAmount: $paidCents); // idempotent on the cart id
+$order = Order::createFromSnapshot($snapshot, $cart, $payment);   // from a snapshot you kept
+```
+
+Conversion happens after money changed hands, so it never throws for a product that sold out or a voucher that stopped qualifying in the meantime: the order is created as paid for and `StockShortageDetected` / `DiscountInvalidAtConversion` tell you to follow up. The cart is stamped `converted_at` and closed for good (`CartConvertedException`); the session, the middleware and the login merge hand out a fresh cart from then on.
+
+### What an order remembers
+
+An order stands on its own. Besides its lines it carries `customerSnapshot()`, `shippingAddressSnapshot()`, `invoiceAddressSnapshot()` (every address column plus country name and code), `shippingMethodSnapshot()`, `discountsSnapshot()` and a `snapshot_fingerprint`. Edit the address book, rename the product or change the shipping method a year later: the order still says what was sold. The `*_id` columns remain as references; the money columns and snapshots are guarded against mass assignment.
+
+```php
+$order->markAsCompleted();   // OrderStatusChanged
+$order->markAsRefunded();    // OrderStatus::Refunded + OrderRefunded (once)
+$cart = $order->toNewCart(); // re-order: fresh cart at current prices, skipping what vanished or sold out
+```
+
+Status changes are guarded: pending → canceled, completed or refunded; completed → refunded; canceled → pending; a refund is final. Anything else throws `InvalidOrderStatusTransitionException`; repeating the current status is a no-op. A canceled or refunded order hands its voucher redemptions back.
+
+An open cart can re-ask every purchasable for its current price, for example when a customer returns to a cart that sat overnight:
 
 ```php
 $changed = $cart->refreshPrices(); // repriced lines; fires ItemPriceChanged per line
 ```
-
-### After the order
-
-```php
-$order->markAsCompleted();   // OrderStatus::Completed
-$order->markAsRefunded();    // OrderStatus::Refunded + OrderRefunded event (once)
-$cart = $order->toNewCart(); // re-order: fresh cart at current prices,
-                             // skipping products that vanished or are out of stock
-```
-
-Status changes are guarded: a pending order may be canceled, completed or refunded, a completed order may only be refunded, a canceled order may be reopened to pending, and a refund is final. Anything else throws `InvalidOrderStatusTransitionException`; marking the current status again is a no-op. A canceled or refunded order hands its voucher redemptions back, so they no longer count towards a usage limit or a once-per-customer rule.
 
 ### Prices
 
@@ -177,13 +188,15 @@ $price->format();                         // "€ 121,00" in the configured loca
 
 ### Shipping and fees
 
-The customer picks a shipping method; the method prices itself against the cart, with an optional free-over-threshold (`free_from_amount`). A single fee line carries a payment surcharge and is replaced — never stacked — when the choice changes:
+The customer picks a shipping method; the method prices itself against the cart, with an optional free-over-threshold (`free_from_amount`, measured against the product subtotal). Which methods apply is decided by their `ShippingMethodCondition` bands (inclusive subtotal ranges; a method without conditions applies to any cart), `valid_from` / `valid_till`, and `sort` (lowest wins as the default). The picked method stays selected through cart changes for as long as it is still active and applicable; then the default takes over. A single fee line carries a payment surcharge and is replaced, never stacked:
 
 ```php
-$cart->selectShippingMethod($method);   // null clears shipping (e.g. pickup)
-$cart->setFee('Toeslag VISA', Price::fromGross(150, 21.0));
-$cart->setFee('Toeslag VISA', null);    // remove the surcharge again
+$cart->selectShippingMethod($method);   // null clears shipping (e.g. pickup); ShippingMethodSelected
+$cart->setFee('Toeslag VISA', Price::fromGross(150, 21));
+$cart->setFee('Toeslag VISA', null);    // remove the surcharge again; FeeChanged
 ```
+
+Override `hasExcludedShipping()` in a cart subclass to rule shipping out for a cart (a download-only order, say). An empty cart never carries a shipping line.
 
 ### Events
 
@@ -193,18 +206,22 @@ Hook into the full lifecycle without touching package code:
 | --- | --- |
 | `CartCreated` | a fresh cart is minted for the session |
 | `ItemAdded`, `ItemQuantityChanged`, `ItemRemoved` | product lines change |
-| `DiscountApplied`, `DiscountRejected` | a voucher lands or is refused (with the reason) |
+| `ItemPriceChanged` | `refreshPrices()` or a tier crossing repriced a line |
+| `DiscountApplied`, `DiscountRejected` | a voucher lands (with its total and per-rate lines) or is refused (with the reason) |
 | `ShippingCalculated` | a shipping method is (re)priced for the cart |
+| `ShippingMethodSelected`, `FeeChanged` | the customer picked a method / a fee was set or cleared |
+| `CartConfirmed`, `CartReopened` | the cart froze for payment / was taken back |
 | `CartMerged` | a guest cart's product lines fold into the user's open cart at login; the guest cart is soft-deleted with its lines |
 | `CustomerCreated` | a prospect is promoted to a customer |
-| `ItemPriceChanged` | `refreshPrices()` or a tier crossing repriced a line |
 | `OrderCreated` | the paid cart became an order |
-| `OrderRefunded` | an order was marked as refunded |
+| `StockShortageDetected`, `DiscountInvalidAtConversion` | an order was created although a line sold out / a voucher stopped qualifying after payment |
+| `PaymentSnapshotMismatch`, `DuplicatePaymentDetected` | a paid amount did not match its snapshot (no order) / a second payment settled for a converted cart |
+| `OrderStatusChanged`, `OrderRefunded` | an order moved status / was refunded |
 | `CartAbandoned` | housekeeping flags a quiet cart |
 
 ### Extend the models
 
-Every model resolves through `config('cart.models.*')`, so a host application can subclass any of them — to add multi-tenancy, wire in payment, or add its own relations:
+Every model resolves through `config('cart.models.*')`, so a host application can subclass any of them — to add multi-tenancy, extra relations or your own logic. Subclasses may carry any name; relations use explicit foreign keys.
 
 ```php
 // config/cart.php
@@ -214,21 +231,20 @@ Every model resolves through `config('cart.models.*')`, so a host application ca
 ```php
 namespace App\Models\Shop;
 
-use Marshmallow\Payable\Traits\Payable;
-use Marshmallow\Payable\Traits\PayableWithItems;
-
 class ShoppingCart extends \Marshmallow\Ecommerce\Cart\Models\ShoppingCart
 {
-    use Payable;
-    use PayableWithItems;
+    public function hasExcludedShipping(): bool
+    {
+        return $this->productItems()->every(fn ($line) => $line->meta['digital'] ?? false);
+    }
 }
 ```
 
-The cart already exposes everything `marshmallow/payable` asks of a payable model (`getTotalAmount()`, `getPayableDescription()`, the customer getters), so payment is one trait away. It also implements `getPayableSnapshot()`, which payable freezes onto the payment when it starts — proof of what the settled amount covered, independent of what happens to the cart afterwards.
+Login and logout listeners react only to `config('cart.customer_guard')`; an admin signing into another guard in the same browser never touches the customer's cart.
 
 ### Housekeeping
 
-Schedule the abandoned-cart command to flag quiet carts (firing `CartAbandoned` per cart) and permanently prune the long-expired ones, lines and orphaned prospects included. A flagged cart that sees activity again is unflagged. Confirmed carts are never pruned.
+Schedule the abandoned-cart command to flag quiet carts (firing `CartAbandoned` per cart) and permanently prune the long-expired ones, lines and orphaned prospects included. A flagged cart that sees activity again is unflagged; every line change counts as activity. Confirmed and converted carts are never touched.
 
 ```php
 Schedule::command('ecommerce:clean-carts')->daily();
@@ -243,6 +259,10 @@ composer test
 ```
 
 The suite runs on Pest with a 100% coverage gate; `composer analyse` runs PHPStan and `composer lint` runs Pint.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md); upgrade notes live in [UPGRADE.md](UPGRADE.md).
 
 ## Contributing
 

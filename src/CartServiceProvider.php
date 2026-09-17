@@ -9,6 +9,7 @@ use Illuminate\Auth\Events\Logout;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
 use Marshmallow\Ecommerce\Cart\Console\Commands\CleanCartsCommand;
+use Marshmallow\Payable\Events\PaymentStatusPaid;
 
 class CartServiceProvider extends ServiceProvider
 {
@@ -22,7 +23,7 @@ class CartServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerMiddleware();
-        $this->registerAuthListeners();
+        $this->registerListeners();
         $this->loadJsonTranslationsFrom(__DIR__.'/../resources/lang');
 
         if ($this->app->runningInConsole()) {
@@ -37,7 +38,7 @@ class CartServiceProvider extends ServiceProvider
         $router->aliasMiddleware($alias, config('cart.middleware.class'));
     }
 
-    protected function registerAuthListeners(): void
+    protected function registerListeners(): void
     {
         /** @var Dispatcher $events */
         $events = $this->app['events'];
@@ -48,6 +49,10 @@ class CartServiceProvider extends ServiceProvider
 
         foreach ((array) config('cart.listeners.logout', []) as $listener) {
             $events->listen(Logout::class, $listener);
+        }
+
+        foreach ((array) config('cart.listeners.payment_paid', []) as $listener) {
+            $events->listen(PaymentStatusPaid::class, $listener);
         }
     }
 
@@ -61,11 +66,13 @@ class CartServiceProvider extends ServiceProvider
             __DIR__.'/../config/cart.php' => config_path('cart.php'),
         ], 'cart-config');
 
-        $this->publishes([
+        // publishesMigrations() stamps each file with the publish time, so the
+        // package migrations sort after the host's own.
+        $this->publishesMigrations([
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'cart-migrations');
 
-        $this->publishes([
+        $this->publishesMigrations([
             __DIR__.'/../database/migrations-upgrade' => database_path('migrations'),
         ], 'cart-upgrade-migrations');
 

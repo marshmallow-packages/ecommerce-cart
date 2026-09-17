@@ -128,7 +128,7 @@ it('soft deletes the source cart after merging', function (): void {
 
 it('refuses to merge into a confirmed cart and leaves the source intact', function (): void {
     $target = ShoppingCart::completelyNew();
-    $target->update(['confirmed_at' => now()]);
+    $target->forceFill(['confirmed_at' => now()])->save();
     $source = ShoppingCart::completelyNew();
     $source->add(productPriced(1000), 1);
 

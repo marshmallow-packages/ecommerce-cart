@@ -6,6 +6,8 @@ namespace Marshmallow\Ecommerce\Cart;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use InvalidArgumentException;
+use Marshmallow\Ecommerce\Cart\Contracts\Purchasable;
 use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 
 /**
@@ -28,6 +30,23 @@ class Cart
         $cart = request()->attributes->get(self::REQUEST_KEY);
 
         return $cart instanceof ShoppingCart ? $cart : null;
+    }
+
+    /**
+     * Fail loudly on the first storefront request when the configured product
+     * model cannot be put in a cart, instead of on the first add() deep
+     * inside a checkout. A model that does not exist (yet) is left alone so
+     * publishing and migrating a fresh install always work.
+     */
+    public function assertConfigurationIsUsable(): void
+    {
+        $product = config('cart.models.product');
+
+        if (is_string($product) && class_exists($product) && ! is_subclass_of($product, Purchasable::class)) {
+            throw new InvalidArgumentException(
+                "The configured cart product model [{$product}] must implement ".Purchasable::class.'.',
+            );
+        }
     }
 
     public function getUserGuard(): string

@@ -41,6 +41,17 @@ it('applies when any of its bands matches', function (): void {
         ->and($method->appliesToSubtotal(7000))->toBeFalse();
 });
 
+it('creates conditions through their factory', function (): void {
+    $method = ShippingMethod::factory()->create();
+    $condition = Marshmallow\Ecommerce\Cart\Models\ShippingMethodCondition::factory()->create([
+        'shipping_method_id' => $method->id,
+        'minimum_amount_including_vat' => 1000,
+    ]);
+
+    expect($condition->shippingMethod->is($method))->toBeTrue()
+        ->and($method->fresh()->load('conditions')->appliesToSubtotal(999))->toBeFalse();
+});
+
 it('applies to every subtotal without conditions', function (): void {
     $method = ShippingMethod::factory()->create()->load('conditions');
 

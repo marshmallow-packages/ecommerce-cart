@@ -12,14 +12,14 @@ arch('the source declares strict types')
     ->toUseStrictTypes();
 
 arch('no debugging statements are left behind')
-    ->expect(['dd', 'dump', 'ray', 'var_dump', 'ddd'])
-    ->not->toBeUsed();
+    ->expect('Marshmallow\Ecommerce\Cart')
+    ->not->toUse(['dd', 'dump', 'ray', 'var_dump', 'ddd']);
 
-arch('the php and security presets hold')
-    ->preset()->php();
+arch('the php preset holds')
+    ->preset()->php()->ignoring('Marshmallow\Payable');
 
 arch('the security preset holds')
-    ->preset()->security();
+    ->preset()->security()->ignoring('Marshmallow\Payable');
 
 arch('events are final')
     ->expect('Marshmallow\Ecommerce\Cart\Events')

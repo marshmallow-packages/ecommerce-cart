@@ -215,14 +215,17 @@ it('rejects an e-mail discount when the cart has no e-mail at all', function ():
     ])))->toThrow(DiscountException::class, 'not one of them');
 });
 
-it('matches eligible e-mails exactly', function (): void {
+it('matches eligible e-mails regardless of case', function (): void {
     $cart = cartOf([[10000, 1, 21.0]]);
-    $cart->prospect->update(['email' => 'VIP@example.com']);
+    $cart->prospect->update(['email' => 'VIP@Example.com']);
 
-    expect(fn () => $cart->fresh()->applyDiscount(Discount::factory()->create([
+    $cart->fresh()->applyDiscount(Discount::factory()->create([
         'eligible_for' => DiscountEligibility::Emails,
         'eligible_for_emails' => ['vip@example.com'],
-    ])))->toThrow(DiscountException::class);
+        'fixed_amount' => 100,
+    ]));
+
+    expect($cart->fresh()->getDiscountAmount())->toBe(-100);
 });
 
 /*
@@ -316,8 +319,10 @@ it('announces the applied discount with its negative amount', function (): void 
 
     Event::assertDispatched(DiscountApplied::class, fn (DiscountApplied $e): bool => $e->cart->is($cart)
         && $e->discount->is($discount)
-        && $e->amount->amountIncludingVat === -2500
-        && $e->amount->currency === 'EUR');
+        && $e->amount === -2500
+        && $e->prices->count() === 1
+        && $e->prices->first()->amountIncludingVat === -2500
+        && $e->prices->first()->currency === 'EUR');
 });
 
 it('announces a rejected discount with the reason shown to the customer', function (): void {

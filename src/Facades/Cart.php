@@ -11,6 +11,7 @@ use Marshmallow\Ecommerce\Cart\Models\ShoppingCart;
 /**
  * @method static Request addToRequest(Request $request, ShoppingCart $cart)
  * @method static ShoppingCart|null getFromRequest()
+ * @method static void assertConfigurationIsUsable()
  * @method static string getUserGuard()
  * @method static ShoppingCart get()
  *

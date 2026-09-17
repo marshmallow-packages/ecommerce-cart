@@ -148,9 +148,9 @@ it('signs legacy lines exactly like new lines', function (): void {
     $book = DB::table('shopping_cart_items')->where('description', 'Boek')->first();
     $shipping = DB::table('shopping_cart_items')->where('description', 'PostNL')->first();
 
-    expect($book->signature)->toBe(ShoppingCartItem::signatureFor('42', CartItemType::Product, null))
+    expect($book->signature)->toBe(ShoppingCartItem::signatureFor(null, '42', CartItemType::Product, null))
         ->and($book->signature)->toBe((new ShoppingCartItem(['purchasable_id' => 42, 'type' => CartItemType::Product]))->buildSignature())
-        ->and($shipping->signature)->toBe(ShoppingCartItem::signatureFor(null, CartItemType::Shipping, null))
+        ->and($shipping->signature)->toBe(ShoppingCartItem::signatureFor(null, null, CartItemType::Shipping, null))
         ->and(DB::table('shopping_cart_items')->whereNull('signature')->count())->toBe(0);
 });
 

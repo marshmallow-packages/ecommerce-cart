@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Marshmallow\Addressable\Traits\Addressable;
+use Marshmallow\Ecommerce\Cart\Database\Factories\ProspectFactory;
 use Marshmallow\Ecommerce\Cart\Events\CustomerCreated;
 
 /**
@@ -42,6 +44,11 @@ class Prospect extends Model
         return [
             'converted_at' => 'datetime',
         ];
+    }
+
+    protected static function newFactory(): Factory
+    {
+        return ProspectFactory::new();
     }
 
     public function getFullName(): string

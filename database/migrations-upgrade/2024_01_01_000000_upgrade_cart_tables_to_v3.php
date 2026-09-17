@@ -119,7 +119,7 @@ return new class extends Migration
                 $meta = is_string($row->meta ?? null) ? json_decode($row->meta, true) : null;
 
                 DB::table('shopping_cart_items')->where('id', $row->id)->update([
-                    'signature' => $itemModel::signatureFor($row->purchasable_id ?? null, $type, is_array($meta) ? $meta : null),
+                    'signature' => $itemModel::signatureFor($row->purchasable_type ?? null, $row->purchasable_id ?? null, $type, is_array($meta) ? $meta : null),
                 ]);
             }
         });

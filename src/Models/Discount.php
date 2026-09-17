@@ -6,11 +6,15 @@ namespace Marshmallow\Ecommerce\Cart\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection as PriceCollection;
+use Illuminate\Support\Str;
 use Marshmallow\Ecommerce\Cart\Contracts\HasPurchasableCategories;
+use Marshmallow\Ecommerce\Cart\Database\Factories\DiscountFactory;
 use Marshmallow\Ecommerce\Cart\Enums\CartItemType;
 use Marshmallow\Ecommerce\Cart\Enums\DiscountAppliesTo;
 use Marshmallow\Ecommerce\Cart\Enums\DiscountEligibility;
@@ -21,7 +25,9 @@ use Marshmallow\Ecommerce\Cart\Exceptions\DiscountException;
 use Marshmallow\Ecommerce\Cart\Support\Price;
 
 /**
- * A voucher/discount, applied to a cart as a negative line.
+ * A voucher/discount, applied to a cart as negative lines: one per VAT rate
+ * the discount spans, so the VAT on the discount mirrors the VAT on what it
+ * discounts.
  *
  * All monetary fields are stored in cents; converting euros to cents is the
  * responsibility of the editing layer, not this model.
@@ -80,9 +86,30 @@ class Discount extends Model
         ];
     }
 
+    protected static function newFactory(): Factory
+    {
+        return DiscountFactory::new();
+    }
+
     public static function byCode(string $code): ?self
     {
         return static::where('discount_code', $code)->first();
+    }
+
+    /**
+     * The discounts for a set of codes, keyed by code, in one query.
+     *
+     * @param  iterable<int, string>  $codes
+     * @return Collection<string, static>
+     */
+    public static function byCodes(iterable $codes): Collection
+    {
+        /** @var Collection<string, static> $discounts */
+        $discounts = static::whereIn('discount_code', collect($codes)->unique()->values()->all())
+            ->get()
+            ->keyBy('discount_code');
+
+        return $discounts;
     }
 
     /**
@@ -113,12 +140,26 @@ class Discount extends Model
         $this->assertUsageWithinLimits($cart);
     }
 
-    public function calculateForCart(ShoppingCart $cart): Price
+    /**
+     * The negative lines this discount books on the cart: the discount amount
+     * distributed over the VAT rates of the lines it applies to, pro rata to
+     * what those lines are worth, rounded at the cents level so the lines sum
+     * to the discount exactly. A free-shipping code follows the shipping
+     * line's own rate.
+     *
+     * @return PriceCollection<int, Price>
+     */
+    public function calculateForCart(ShoppingCart $cart): PriceCollection
     {
+        $currency = $this->currencyFor($cart);
+
+        if ($this->discount_type === DiscountType::FreeShipping) {
+            return $this->distribute($cart->getShippingAmount(), $cart->shippingItems(), $currency);
+        }
+
         $amount = match ($this->discount_type) {
             DiscountType::FixedAmount => $this->fixedAmountDiscount($cart),
             DiscountType::Percentage => $this->percentageDiscount($cart),
-            DiscountType::FreeShipping => $cart->getShippingAmount(),
         };
 
         // Stacked codes may never push the products below zero: the cap is the
@@ -126,7 +167,58 @@ class Discount extends Model
         $remaining = max(0, $cart->getSubtotal() + $cart->getDiscountAmount());
         $amount = min(abs($amount), $remaining);
 
-        return Price::fromGross($amount, $this->vatPercentageFor($cart), $this->currencyFor($cart))->negate();
+        return $this->distribute($amount, $this->eligibleItems($cart), $currency);
+    }
+
+    /**
+     * Split a gross amount over the VAT rates of the given lines, weighted by
+     * the gross value per rate, using the largest-remainder method so no cent
+     * is lost or invented.
+     *
+     * @param  Collection<int, ShoppingCartItem>  $lines
+     * @return PriceCollection<int, Price>
+     */
+    protected function distribute(int $amount, Collection $lines, string $currency): PriceCollection
+    {
+        $weights = $lines
+            ->groupBy(fn (ShoppingCartItem $line): string => (string) (float) $line->vat_percentage)
+            ->map(fn (Collection $group): int => (int) $group->sum(fn (ShoppingCartItem $line): int => $line->getTotalAmount()))
+            ->filter(fn (int $weight): bool => $weight > 0);
+
+        if ($amount <= 0 || $weights->isEmpty()) {
+            $first = $lines->first();
+            $rate = $first ? (float) $first->vat_percentage : (float) config('cart.default_vat_percentage', 21.0);
+
+            return new PriceCollection([Price::fromGross(0, $rate, $currency)]);
+        }
+
+        $total = (int) $weights->sum();
+        $parts = [];
+        $remainders = [];
+        $allocated = 0;
+
+        foreach ($weights as $rate => $weight) {
+            $exact = $amount * $weight / $total;
+            $parts[$rate] = (int) floor($exact);
+            $remainders[$rate] = $exact - $parts[$rate];
+            $allocated += $parts[$rate];
+        }
+
+        arsort($remainders);
+
+        foreach (array_keys($remainders) as $rate) {
+            if ($allocated >= $amount) {
+                break;
+            }
+
+            $parts[$rate]++;
+            $allocated++;
+        }
+
+        return (new PriceCollection($parts))
+            ->filter(fn (int $part): bool => $part > 0)
+            ->map(fn (int $part, int|string $rate): Price => Price::fromGross($part, (float) $rate, $currency)->negate())
+            ->values();
     }
 
     /**
@@ -184,9 +276,10 @@ class Discount extends Model
         }
 
         if ($this->eligible_for === DiscountEligibility::Emails) {
-            $email = $cart->getCustomerEmail();
+            $email = Str::lower((string) $cart->getCustomerEmail());
+            $allowed = array_map(fn (string $address): string => Str::lower($address), $this->eligible_for_emails ?? []);
 
-            if (! $email || ! in_array($email, $this->eligible_for_emails ?? [], true)) {
+            if ($email === '' || ! in_array($email, $allowed, true)) {
                 throw new DiscountException(__('This voucher can only be used by some customers. Sadly, you are not one of them.'));
             }
         }
@@ -274,15 +367,6 @@ class Discount extends Model
             $purchasable->getPurchasableCategoryKeys(),
             $this->applies_to_product_categories ?? [],
         );
-    }
-
-    protected function vatPercentageFor(ShoppingCart $cart): float
-    {
-        $rates = $cart->productItems()->pluck('vat_percentage')->unique();
-
-        return $rates->count() === 1
-            ? (float) $rates->first()
-            : (float) config('cart.default_vat_percentage', 21.0);
     }
 
     protected function currencyFor(ShoppingCart $cart): string

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Marshmallow\Ecommerce\Cart\Models;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Marshmallow\Ecommerce\Cart\Database\Factories\ShippingMethodConditionFactory;
 
 /**
  * A subtotal band that makes its shipping method applicable. Amounts are gross
@@ -30,6 +32,11 @@ class ShippingMethodCondition extends Model
             'minimum_amount_including_vat' => 'integer',
             'maximum_amount_including_vat' => 'integer',
         ];
+    }
+
+    protected static function newFactory(): Factory
+    {
+        return ShippingMethodConditionFactory::new();
     }
 
     public function matches(int $subtotal): bool

@@ -53,7 +53,7 @@ class Product extends Model implements HasPurchasableCategories, Purchasable
         return $this->name;
     }
 
-    public function getPurchasablePrice(int $quantity = 1): Price
+    public function getPurchasablePrice(int $quantity = 1, ?ShoppingCart $cart = null): Price
     {
         $cents = $this->price_cents;
 

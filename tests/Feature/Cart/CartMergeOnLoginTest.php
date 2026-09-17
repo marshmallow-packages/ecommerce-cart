@@ -87,7 +87,7 @@ it('simply reconnects when the session cart already is the user open cart', func
 it('ignores a confirmed cart of the user and adopts the guest cart', function (): void {
     $user = User::factory()->create();
     $confirmed = ShoppingCart::completelyNew();
-    $confirmed->update(['user_id' => $user->id, 'confirmed_at' => now()]);
+    $confirmed->forceFill(['user_id' => $user->id, 'confirmed_at' => now()])->save();
 
     session()->forget(ShoppingCart::SESSION_KEY);
     $guest = ShoppingCart::completelyNew();
@@ -143,4 +143,27 @@ it('disconnects the cart from the user on logout', function (): void {
     event(new Logout('web', $user));
 
     expect($cart->fresh()->user_id)->toBeNull();
+});
+
+it('ignores logins and logouts on another guard', function (): void {
+    $user = User::factory()->create();
+    $customerCart = ShoppingCart::completelyNew();
+    $customerCart->update(['user_id' => $user->id]);
+    $customerCart->add(Product::factory()->create(), 1);
+
+    session()->forget(ShoppingCart::SESSION_KEY);
+    $adminSessionCart = ShoppingCart::completelyNew();
+    $adminSessionCart->add(Product::factory()->create(), 1);
+
+    // An admin with the same numeric id signs into a different guard.
+    event(new Login('admin', $user, false));
+
+    expect($customerCart->fresh()->productItems())->toHaveCount(1)
+        ->and($adminSessionCart->fresh()->trashed())->toBeFalse()
+        ->and($adminSessionCart->fresh()->user_id)->toBeNull()
+        ->and(session()->get(ShoppingCart::SESSION_KEY))->toBe($adminSessionCart->id);
+
+    event(new Logout('admin', $user));
+
+    expect($customerCart->fresh()->user_id)->toBe($user->id);
 });
