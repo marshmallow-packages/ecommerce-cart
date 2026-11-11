@@ -266,6 +266,12 @@ class ShoppingCart extends Model
     public function connectUser($user)
     {
         $user = $user->fresh();
+
+        // The user can be gone already, e.g. a logout event fired while deleting the account.
+        if (! $user) {
+            return;
+        }
+
         $this->user_id = $user->id;
         $this->customer_id = ($user->customer) ? $user->customer->id : null;
         $this->update();
